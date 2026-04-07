@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "adaptive-shift-bench"
+version = "0.1.0"
+description = "Offline synthetic benchmark for adaptive interface shifts in real software ecosystems."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{name = "afafw"}]
+license = {text = "MIT"}
+keywords = ["benchmark", "llm", "kaggle", "agi", "evaluation"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "License :: OSI Approved :: MIT License",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = []
+
+[project.scripts]
+adaptive-shift-claude-pilot = "adaptive_shift_bench.claude_runner:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

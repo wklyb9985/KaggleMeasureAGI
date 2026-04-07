@@ -1,0 +1,2 @@
+[console_scripts]
+adaptive-shift-claude-pilot = adaptive_shift_bench.claude_runner:main
