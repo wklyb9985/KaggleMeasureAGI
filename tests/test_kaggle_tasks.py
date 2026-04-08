@@ -136,6 +136,15 @@ class KaggleTaskTests(unittest.TestCase):
         self.assertEqual(scores, [1.0, 1.0])
         self.assertEqual(len(adapters), 2)
 
+    def test_local_kaggle_tasks_keep_runtime_float_annotations(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patched_local_kaggle_benchmarks():
+                attempt_task, sequence_task, overall_task = build_kbench_v2_learning_tasks(output_dir=temp_dir)
+
+        self.assertIs(attempt_task.func.__annotations__["return"], float)
+        self.assertIs(sequence_task.func.__annotations__["return"], float)
+        self.assertIs(overall_task.func.__annotations__["return"], float)
+
 
 if __name__ == "__main__":
     unittest.main()
