@@ -1,5 +1,6 @@
 from adaptive_shift_bench.engine import run_scenario, run_sequence, run_sequence_suite, run_suite
 from adaptive_shift_bench.kaggle_tasks import (
+    get_public_kbench_v2_learning_tasks,
     build_kbench_tasks,
     build_kbench_v2_learning_tasks,
     build_kbench_v2_tasks,
@@ -44,6 +45,7 @@ __all__ = [
     "build_kbench_tasks",
     "build_kbench_v2_learning_tasks",
     "build_kbench_v2_tasks",
+    "get_public_kbench_v2_learning_tasks",
     "build_stress_suite",
     "build_v2_learning_variant_a_sequences",
     "build_v2_learning_variant_a_stage_suite",

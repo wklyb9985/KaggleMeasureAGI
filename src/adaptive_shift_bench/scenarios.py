@@ -1778,9 +1778,10 @@ def _registry_learning_sequence_worlds() -> tuple[Scenario, ...]:
                 """,
             "revision_example_text": """
                 Runnable local example:
-                payload = {"model": "glm-7-air-preview"}
+                payload = {"model": "approved-fallback-model"}
                 print(payload)
-                This is the sanctioned fallback payload for glm-8-small.
+                The payload must be a JSON object with a single model field.
+                Use the fallback table to replace approved-fallback-model with the sanctioned local model.
                 """,
             "localized_reference_text": """
                 glm-8-mini 未在本地注册。

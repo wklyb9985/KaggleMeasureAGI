@@ -28,21 +28,20 @@ for module_name in [name for name in sys.modules if name == "adaptive_shift_benc
     del sys.modules[module_name]
 importlib.invalidate_caches()
 
-from adaptive_shift_bench.kaggle_tasks import build_kbench_v2_learning_tasks
+from adaptive_shift_bench.kaggle_tasks import get_public_kbench_v2_learning_tasks
 
 
 (
-    adaptive_shift_v2_learning_attempt,
-    adaptive_shift_v2_learning_sequence,
+    adaptive_shift_v2_learning_openai,
+    adaptive_shift_v2_learning_pandas,
+    adaptive_shift_v2_learning_registry,
     adaptive_shift_v2_learning_overall,
-) = build_kbench_v2_learning_tasks()
+) = get_public_kbench_v2_learning_tasks()
 
 # Run the canonical learning leaderboard task.
 adaptive_shift_v2_learning_overall.run(llm=kbench.llm)
 
 # Example sequence smoke:
-# adaptive_shift_v2_learning_sequence.run(
-#     llm=kbench.llm,
-#     sequence_id="v2-learning-openai-revision",
-#     attempt_index=0,
-# )
+# adaptive_shift_v2_learning_openai.run(llm=kbench.llm, attempt_index=0)
+# adaptive_shift_v2_learning_pandas.run(llm=kbench.llm, attempt_index=0)
+# adaptive_shift_v2_learning_registry.run(llm=kbench.llm, attempt_index=0)
