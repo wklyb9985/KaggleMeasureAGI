@@ -1,22 +1,70 @@
-from adaptive_shift_bench.engine import run_scenario, run_suite
-from adaptive_shift_bench.kaggle_tasks import build_kbench_tasks
-from adaptive_shift_bench.reporting import aggregate_attempts, write_report_bundle
+from adaptive_shift_bench.engine import run_scenario, run_sequence, run_sequence_suite, run_suite
+from adaptive_shift_bench.kaggle_tasks import (
+    build_kbench_tasks,
+    build_kbench_v2_learning_tasks,
+    build_kbench_v2_tasks,
+)
+from adaptive_shift_bench.local_kaggle_mock import (
+    LocalTaskLLM,
+    install_local_kaggle_benchmarks,
+    patched_local_kaggle_benchmarks,
+    run_parallel,
+)
+from adaptive_shift_bench.reporting import (
+    aggregate_attempts,
+    aggregate_sequence_results,
+    write_report_bundle,
+    write_sequence_report_bundle,
+)
 from adaptive_shift_bench.scenarios import (
     DEFAULT_ATTEMPTS,
     build_core_suite,
+    build_v2_learning_variant_a_sequences,
+    build_v2_learning_variant_a_stage_suite,
     build_stress_suite,
+    build_v2_learning_variant_c_sequences,
+    build_v2_learning_variant_c_stage_suite,
+    build_v2_learning_sequences,
+    build_v2_learning_stage_suite,
+    build_v2_sequences,
+    build_v2_stage_suite,
     get_scenario,
+    get_v2_learning_scenario,
+    get_v2_learning_sequence,
+    get_v2_scenario,
+    get_v2_sequence,
 )
 
 __all__ = [
     "DEFAULT_ATTEMPTS",
+    "LocalTaskLLM",
     "aggregate_attempts",
+    "aggregate_sequence_results",
     "build_core_suite",
     "build_kbench_tasks",
+    "build_kbench_v2_learning_tasks",
+    "build_kbench_v2_tasks",
     "build_stress_suite",
+    "build_v2_learning_variant_a_sequences",
+    "build_v2_learning_variant_a_stage_suite",
+    "build_v2_learning_variant_c_sequences",
+    "build_v2_learning_variant_c_stage_suite",
+    "build_v2_learning_sequences",
+    "build_v2_learning_stage_suite",
+    "build_v2_sequences",
+    "build_v2_stage_suite",
     "get_scenario",
+    "get_v2_learning_scenario",
+    "get_v2_learning_sequence",
+    "get_v2_scenario",
+    "get_v2_sequence",
+    "install_local_kaggle_benchmarks",
+    "patched_local_kaggle_benchmarks",
     "run_scenario",
+    "run_sequence",
+    "run_sequence_suite",
     "run_suite",
+    "run_parallel",
     "write_report_bundle",
+    "write_sequence_report_bundle",
 ]
-

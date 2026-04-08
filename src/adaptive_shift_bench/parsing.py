@@ -31,6 +31,9 @@ def parse_action(text: str) -> EpisodeAction:
     except json.JSONDecodeError:
         return EpisodeAction(action="answer", content=text.strip(), raw_response=text)
 
+    if not isinstance(payload, dict) or "action" not in payload:
+        return EpisodeAction(action="answer", content=payload, raw_response=text)
+
     action = str(payload.get("action", "answer")).strip().lower()
     aliases = {
         "search": "search_docs",

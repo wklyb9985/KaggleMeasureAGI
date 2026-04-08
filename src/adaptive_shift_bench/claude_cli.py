@@ -21,33 +21,29 @@ class ClaudeCLIInvocation:
 
 def build_transcript_prompt(history: list[tuple[str, str]], message: str) -> str:
     lines = [
-        "You are being called through Claude Code print mode inside a benchmark harness.",
-        "Treat the transcript below as the full conversation state.",
-        "Reply only with the next assistant message for the current turn.",
+        "You are continuing a self-contained software task in a local workspace.",
+        "API names, model names, and docs mentioned by the user may be specific to this workspace.",
+        "Base your answer on the conversation below and reply with only the next assistant message.",
         "",
     ]
+    if history:
+        lines.extend(["Conversation so far:", ""])
     for index, (user_message, assistant_message) in enumerate(history, start=1):
         lines.extend(
             [
-                f"<turn index=\"{index}\">",
-                "<user>",
+                f"User ({index}):",
                 user_message,
-                "</user>",
-                "<assistant>",
+                "",
+                f"Assistant ({index}):",
                 assistant_message,
-                "</assistant>",
-                "</turn>",
                 "",
             ]
         )
 
     lines.extend(
         [
-            "<current_turn>",
-            "<user>",
+            "Current user message:",
             message,
-            "</user>",
-            "</current_turn>",
         ]
     )
     return "\n".join(lines)
@@ -117,4 +113,3 @@ class ClaudeCLIAdapter(LLMAdapter):
         self.invocations.append(invocation)
         self.history.append((message, response_text))
         return response_text
-

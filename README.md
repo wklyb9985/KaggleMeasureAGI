@@ -10,6 +10,13 @@ It is built to support:
 - `pass@1`, `pass@5`, `avg5`, and weighted overall scoring
 - import into Kaggle notebooks with `kaggle-benchmarks`
 
+## V2 Status
+
+- New V2 sequence reports are emitted as benchmark version `2.1`.
+- Any older V2 report that does not include `benchmark_metadata.benchmark_version` should be treated as `obsolete_pre_fix_v2` and not compared directly with `2.1` results.
+- The canonical learning suite is now `v2_learning` variant `b`, emitted as benchmark version `2.3-learning-b`.
+- Older learning reports should not be compared directly with `2.3-learning-b`.
+
 ## Layout
 
 - `src/adaptive_shift_bench/`: benchmark package
@@ -34,3 +41,32 @@ adaptive_shift_attempt, adaptive_shift_overall = build_kbench_tasks()
 adaptive_shift_overall.run(llm=kbench.llm)
 ```
 
+## Local Kaggle-style smoke runs
+
+You can exercise the same task builders locally by installing the bundled shim at runtime:
+
+```python
+from adaptive_shift_bench.kaggle_tasks import build_kbench_v2_learning_tasks
+from adaptive_shift_bench.local_kaggle_mock import LocalTaskLLM, patched_local_kaggle_benchmarks
+from adaptive_shift_bench.llm import ScriptedLLMAdapter
+
+with patched_local_kaggle_benchmarks():
+    _, adaptive_shift_v2_learning_sequence, _ = build_kbench_v2_learning_tasks(output_dir="workspace/local_kbench_demo")
+    llm = LocalTaskLLM(lambda session_key: ScriptedLLMAdapter([...]))
+    adaptive_shift_v2_learning_sequence.run(
+        llm=llm,
+        sequence_id="v2-learning-openai-revision",
+        attempt_index=0,
+    )
+```
+
+Or use the local runner:
+
+```bash
+PYTHONPATH=src python -m adaptive_shift_bench.local_kaggle_runner \
+  --backend codex \
+  --suite v2_learning \
+  --task sequence \
+  --model gpt-5.4-mini \
+  --sequence-id v2-learning-openai-revision
+```

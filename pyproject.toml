@@ -22,6 +22,8 @@ dependencies = []
 
 [project.scripts]
 adaptive-shift-claude-pilot = "adaptive_shift_bench.claude_runner:main"
+adaptive-shift-codex-pilot = "adaptive_shift_bench.codex_runner:main"
+adaptive-shift-local-kbench = "adaptive_shift_bench.local_kaggle_runner:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

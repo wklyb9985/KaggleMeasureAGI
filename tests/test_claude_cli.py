@@ -15,10 +15,13 @@ class ClaudeCLITests(unittest.TestCase):
             [("user 1", "assistant 1"), ("user 2", "assistant 2")],
             "current",
         )
-        self.assertIn("<turn index=\"1\">", prompt)
+        self.assertIn("Conversation so far:", prompt)
+        self.assertIn("User (1):", prompt)
         self.assertIn("assistant 2", prompt)
-        self.assertIn("<current_turn>", prompt)
+        self.assertIn("Current user message:", prompt)
         self.assertIn("current", prompt)
+        self.assertNotIn("benchmark harness", prompt)
+        self.assertNotIn("<turn", prompt)
 
     def test_claude_adapter_parses_json_payload(self):
         payload = {
@@ -42,8 +45,9 @@ class ClaudeCLITests(unittest.TestCase):
 
     def test_pilot_suite_contains_representative_subset(self):
         suite = build_pilot_suite()
-        self.assertEqual(len(suite), 6)
+        self.assertEqual(len(suite), 7)
         self.assertEqual({scenario.family.value for scenario in suite}, {"api_migration", "dsl_wrapper", "future_registry"})
+        self.assertIn("api_migration-hard-feedback_only", {scenario.id for scenario in suite})
 
 
 if __name__ == "__main__":
