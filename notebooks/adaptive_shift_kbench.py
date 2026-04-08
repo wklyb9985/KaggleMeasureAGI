@@ -1,6 +1,7 @@
 import subprocess
 import sys
 from shutil import which
+import importlib
 
 import kaggle_benchmarks as kbench
 
@@ -10,12 +11,22 @@ try:
     import pip  # noqa: F401
 except ImportError:
     if which("uv"):
-        subprocess.check_call(["uv", "pip", "install", "--python", sys.executable, "-q", "--upgrade", REPO_URL])
+        subprocess.check_call(
+            ["uv", "pip", "install", "--python", sys.executable, "-q", "--upgrade", "--reinstall", REPO_URL]
+        )
     else:
         subprocess.check_call([sys.executable, "-m", "ensurepip", "--upgrade"])
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "--upgrade", REPO_URL])
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "-q", "--no-cache-dir", "--force-reinstall", "--upgrade", REPO_URL]
+        )
 else:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "--upgrade", REPO_URL])
+    subprocess.check_call(
+        [sys.executable, "-m", "pip", "install", "-q", "--no-cache-dir", "--force-reinstall", "--upgrade", REPO_URL]
+    )
+
+for module_name in [name for name in sys.modules if name == "adaptive_shift_bench" or name.startswith("adaptive_shift_bench.")]:
+    del sys.modules[module_name]
+importlib.invalidate_caches()
 
 from adaptive_shift_bench.kaggle_tasks import build_kbench_v2_learning_tasks
 
