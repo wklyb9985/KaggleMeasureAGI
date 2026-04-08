@@ -1,5 +1,6 @@
 import subprocess
 import sys
+from shutil import which
 
 import kaggle_benchmarks as kbench
 
@@ -8,8 +9,13 @@ REPO_URL = "git+https://github.com/wklyb9985/KaggleMeasureAGI.git"
 try:
     import pip  # noqa: F401
 except ImportError:
-    subprocess.check_call([sys.executable, "-m", "ensurepip", "--upgrade"])
-subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "--upgrade", REPO_URL])
+    if which("uv"):
+        subprocess.check_call(["uv", "pip", "install", "--python", sys.executable, "-q", "--upgrade", REPO_URL])
+    else:
+        subprocess.check_call([sys.executable, "-m", "ensurepip", "--upgrade"])
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "--upgrade", REPO_URL])
+else:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "--upgrade", REPO_URL])
 
 from adaptive_shift_bench.kaggle_tasks import build_kbench_v2_learning_tasks
 
