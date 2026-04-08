@@ -41,6 +41,18 @@ from adaptive_shift_bench.kaggle_tasks import get_public_kbench_v2_learning_task
 # Run the canonical learning leaderboard task.
 adaptive_shift_v2_learning_overall.run(llm=kbench.llm)
 
+# Kaggle leaderboards support a single selected task per notebook.
+# Explicitly choose the overall task so subtasks remain visible as breakdowns
+# instead of being treated as the notebook's main benchmark output.
+try:
+    from IPython import get_ipython
+
+    ip = get_ipython()
+    if ip is not None:
+        ip.run_line_magic("choose", "adaptive_shift_v2_learning_overall")
+except Exception:
+    pass
+
 # Example sequence smoke:
 # adaptive_shift_v2_learning_openai.run(llm=kbench.llm, attempt_index=0)
 # adaptive_shift_v2_learning_pandas.run(llm=kbench.llm, attempt_index=0)
