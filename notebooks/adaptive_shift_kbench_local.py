@@ -2,7 +2,7 @@ import subprocess
 import sys
 from shutil import which
 
-REPO_URL = "git+https://github.com/wklyb9985/KaggleMeasureAGI.git"
+REPO_URL = "https://github.com/wklyb9985/KaggleMeasureAGI/archive/refs/heads/master.zip"
 try:
     import pip  # noqa: F401
 except ImportError:
