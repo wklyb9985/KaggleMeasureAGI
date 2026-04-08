@@ -38,7 +38,12 @@ from adaptive_shift_bench.kaggle_tasks import get_public_kbench_v2_learning_task
     adaptive_shift_v2_learning_overall,
 ) = get_public_kbench_v2_learning_tasks()
 
-# Run the canonical learning leaderboard task.
+# Run the expanded canonical learning leaderboard task.
+# `overall` aggregates 9 learning sequences:
+# - 3 OpenAI variants
+# - 3 pandas-wrapper variants
+# - 3 registry variants
+# The three family tasks below remain visible as subtasks/breakdowns in Kaggle.
 adaptive_shift_v2_learning_overall.run(llm=kbench.llm)
 
 # Kaggle leaderboards support a single selected task per notebook.
@@ -54,6 +59,6 @@ except Exception:
     pass
 
 # Example sequence smoke:
-# adaptive_shift_v2_learning_openai.run(llm=kbench.llm, attempt_index=0)
-# adaptive_shift_v2_learning_pandas.run(llm=kbench.llm, attempt_index=0)
-# adaptive_shift_v2_learning_registry.run(llm=kbench.llm, attempt_index=0)
+# adaptive_shift_v2_learning_openai.run(llm=kbench.llm, attempt_index=0)   # family average over 3 OpenAI variants
+# adaptive_shift_v2_learning_pandas.run(llm=kbench.llm, attempt_index=0)   # family average over 3 pandas variants
+# adaptive_shift_v2_learning_registry.run(llm=kbench.llm, attempt_index=0) # family average over 3 registry variants

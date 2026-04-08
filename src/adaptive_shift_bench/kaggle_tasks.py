@@ -34,13 +34,37 @@ from adaptive_shift_bench.scenarios import (
 )
 
 _RUN_NAMESPACE = os.environ.get("ADAPTIVE_SHIFT_RUN_ID", f"run-{os.getpid()}-{uuid.uuid4().hex[:8]}")
-_PUBLIC_V2_LEARNING_SEQUENCE_IDS = {
-    "adaptive_shift_v2_learning_openai": "v2-learning-openai-revision",
-    "adaptive_shift_v2_learning_pandas": "v2-learning-pandas-revision",
-    "adaptive_shift_v2_learning_registry": "v2-learning-registry-revision",
-}
+_PUBLIC_V2_LEARNING_OPENAI_SEQUENCE_IDS = (
+    "v2-learning-openai-revision",
+    "v2-learning-openai-entrypoint",
+    "v2-learning-openai-payload",
+)
+_PUBLIC_V2_LEARNING_PANDAS_SEQUENCE_IDS = (
+    "v2-learning-pandas-revision",
+    "v2-learning-pandas-columns",
+    "v2-learning-pandas-order",
+)
+_PUBLIC_V2_LEARNING_REGISTRY_SEQUENCE_IDS = (
+    "v2-learning-registry-revision",
+    "v2-learning-registry-lumicore",
+    "v2-learning-registry-novalyth",
+)
+_PUBLIC_V2_LEARNING_SEQUENCE_IDS = (
+    _PUBLIC_V2_LEARNING_OPENAI_SEQUENCE_IDS
+    + _PUBLIC_V2_LEARNING_PANDAS_SEQUENCE_IDS
+    + _PUBLIC_V2_LEARNING_REGISTRY_SEQUENCE_IDS
+)
+adaptive_shift_v2_learning_openai_content = None
+adaptive_shift_v2_learning_openai_entrypoint = None
+adaptive_shift_v2_learning_openai_payload = None
 adaptive_shift_v2_learning_openai = None
+adaptive_shift_v2_learning_pandas_stack = None
+adaptive_shift_v2_learning_pandas_columns = None
+adaptive_shift_v2_learning_pandas_order = None
 adaptive_shift_v2_learning_pandas = None
+adaptive_shift_v2_learning_registry_zai = None
+adaptive_shift_v2_learning_registry_lumicore = None
+adaptive_shift_v2_learning_registry_novalyth = None
 adaptive_shift_v2_learning_registry = None
 adaptive_shift_v2_learning_overall = None
 
@@ -108,6 +132,17 @@ def _write_public_sequence_report(
     path = _public_sequence_report_path(result.sequence_id, result.attempt_index, output_dir=output_dir)
     path.write_text(json.dumps(asdict(result), indent=2, sort_keys=True, default=str), encoding="utf-8")
     return path
+
+
+def _write_public_family_report(
+    family_name: str,
+    results: list[SequenceResult],
+    *,
+    output_dir: str | Path | None = None,
+) -> dict[str, object]:
+    report = aggregate_sequence_results(results)
+    write_sequence_report_bundle(report, _resolve_output_dir(output_dir) / "v2_learning" / family_name)
+    return report
 
 
 def _episode_result_from_dict(data: dict[str, Any]) -> EpisodeResult:
@@ -212,34 +247,89 @@ def _run_learning_sequence_result(
         )
 
 
-def _adaptive_shift_v2_learning_openai_func(llm, attempt_index: int = 0) -> float:
-    result = _run_learning_sequence_result(
-        llm,
-        _PUBLIC_V2_LEARNING_SEQUENCE_IDS["adaptive_shift_v2_learning_openai"],
-        attempt_index,
-    )
+def _run_and_store_public_learning_sequence(
+    llm: Any,
+    sequence_id: str,
+    attempt_index: int,
+) -> float:
+    result = _run_learning_sequence_result(llm, sequence_id, attempt_index)
     _write_public_sequence_report(result)
     return result.learning_score
+
+
+def _adaptive_shift_v2_learning_openai_content_func(llm, attempt_index: int = 0) -> float:
+    return _run_and_store_public_learning_sequence(llm, "v2-learning-openai-revision", attempt_index)
+
+
+def _adaptive_shift_v2_learning_openai_entrypoint_func(llm, attempt_index: int = 0) -> float:
+    return _run_and_store_public_learning_sequence(llm, "v2-learning-openai-entrypoint", attempt_index)
+
+
+def _adaptive_shift_v2_learning_openai_payload_func(llm, attempt_index: int = 0) -> float:
+    return _run_and_store_public_learning_sequence(llm, "v2-learning-openai-payload", attempt_index)
+
+
+def _adaptive_shift_v2_learning_pandas_stack_func(llm, attempt_index: int = 0) -> float:
+    return _run_and_store_public_learning_sequence(llm, "v2-learning-pandas-revision", attempt_index)
+
+
+def _adaptive_shift_v2_learning_pandas_columns_func(llm, attempt_index: int = 0) -> float:
+    return _run_and_store_public_learning_sequence(llm, "v2-learning-pandas-columns", attempt_index)
+
+
+def _adaptive_shift_v2_learning_pandas_order_func(llm, attempt_index: int = 0) -> float:
+    return _run_and_store_public_learning_sequence(llm, "v2-learning-pandas-order", attempt_index)
+
+
+def _adaptive_shift_v2_learning_registry_zai_func(llm, attempt_index: int = 0) -> float:
+    return _run_and_store_public_learning_sequence(llm, "v2-learning-registry-revision", attempt_index)
+
+
+def _adaptive_shift_v2_learning_registry_lumicore_func(llm, attempt_index: int = 0) -> float:
+    return _run_and_store_public_learning_sequence(llm, "v2-learning-registry-lumicore", attempt_index)
+
+
+def _adaptive_shift_v2_learning_registry_novalyth_func(llm, attempt_index: int = 0) -> float:
+    return _run_and_store_public_learning_sequence(llm, "v2-learning-registry-novalyth", attempt_index)
+
+
+def _adaptive_shift_v2_learning_openai_func(llm, attempt_index: int = 0) -> float:
+    adaptive_shift_v2_learning_openai_content.run(llm=llm, attempt_index=attempt_index)
+    adaptive_shift_v2_learning_openai_entrypoint.run(llm=llm, attempt_index=attempt_index)
+    adaptive_shift_v2_learning_openai_payload.run(llm=llm, attempt_index=attempt_index)
+    results = [
+        _load_public_sequence_result("v2-learning-openai-revision", attempt_index),
+        _load_public_sequence_result("v2-learning-openai-entrypoint", attempt_index),
+        _load_public_sequence_result("v2-learning-openai-payload", attempt_index),
+    ]
+    report = _write_public_family_report("openai", results)
+    return float(report["metrics"]["learning_score"])
 
 
 def _adaptive_shift_v2_learning_pandas_func(llm, attempt_index: int = 0) -> float:
-    result = _run_learning_sequence_result(
-        llm,
-        _PUBLIC_V2_LEARNING_SEQUENCE_IDS["adaptive_shift_v2_learning_pandas"],
-        attempt_index,
-    )
-    _write_public_sequence_report(result)
-    return result.learning_score
+    adaptive_shift_v2_learning_pandas_stack.run(llm=llm, attempt_index=attempt_index)
+    adaptive_shift_v2_learning_pandas_columns.run(llm=llm, attempt_index=attempt_index)
+    adaptive_shift_v2_learning_pandas_order.run(llm=llm, attempt_index=attempt_index)
+    results = [
+        _load_public_sequence_result("v2-learning-pandas-revision", attempt_index),
+        _load_public_sequence_result("v2-learning-pandas-columns", attempt_index),
+        _load_public_sequence_result("v2-learning-pandas-order", attempt_index),
+    ]
+    report = _write_public_family_report("pandas", results)
+    return float(report["metrics"]["learning_score"])
 
 
 def _adaptive_shift_v2_learning_registry_func(llm, attempt_index: int = 0) -> float:
-    result = _run_learning_sequence_result(
-        llm,
-        _PUBLIC_V2_LEARNING_SEQUENCE_IDS["adaptive_shift_v2_learning_registry"],
-        attempt_index,
-    )
-    _write_public_sequence_report(result)
-    return result.learning_score
+    adaptive_shift_v2_learning_registry_zai.run(llm=llm, attempt_index=attempt_index)
+    adaptive_shift_v2_learning_registry_lumicore.run(llm=llm, attempt_index=attempt_index)
+    adaptive_shift_v2_learning_registry_novalyth.run(llm=llm, attempt_index=attempt_index)
+    results = [
+        _load_public_sequence_result("v2-learning-registry-revision", attempt_index),
+        _load_public_sequence_result("v2-learning-registry-lumicore", attempt_index),
+        _load_public_sequence_result("v2-learning-registry-novalyth", attempt_index),
+    ]
+    report = _write_public_family_report("registry", results)
+    return float(report["metrics"]["learning_score"])
 
 
 def _adaptive_shift_v2_learning_overall_func(llm) -> float:
@@ -247,24 +337,33 @@ def _adaptive_shift_v2_learning_overall_func(llm) -> float:
     for attempt_index in range(DEFAULT_ATTEMPTS):
         adaptive_shift_v2_learning_openai.run(llm=llm, attempt_index=attempt_index)
         results.append(
-            _load_public_sequence_result(
-                _PUBLIC_V2_LEARNING_SEQUENCE_IDS["adaptive_shift_v2_learning_openai"],
-                attempt_index,
-            )
+            _load_public_sequence_result("v2-learning-openai-revision", attempt_index)
+        )
+        results.append(
+            _load_public_sequence_result("v2-learning-openai-entrypoint", attempt_index)
+        )
+        results.append(
+            _load_public_sequence_result("v2-learning-openai-payload", attempt_index)
         )
         adaptive_shift_v2_learning_pandas.run(llm=llm, attempt_index=attempt_index)
         results.append(
-            _load_public_sequence_result(
-                _PUBLIC_V2_LEARNING_SEQUENCE_IDS["adaptive_shift_v2_learning_pandas"],
-                attempt_index,
-            )
+            _load_public_sequence_result("v2-learning-pandas-revision", attempt_index)
+        )
+        results.append(
+            _load_public_sequence_result("v2-learning-pandas-columns", attempt_index)
+        )
+        results.append(
+            _load_public_sequence_result("v2-learning-pandas-order", attempt_index)
         )
         adaptive_shift_v2_learning_registry.run(llm=llm, attempt_index=attempt_index)
         results.append(
-            _load_public_sequence_result(
-                _PUBLIC_V2_LEARNING_SEQUENCE_IDS["adaptive_shift_v2_learning_registry"],
-                attempt_index,
-            )
+            _load_public_sequence_result("v2-learning-registry-revision", attempt_index)
+        )
+        results.append(
+            _load_public_sequence_result("v2-learning-registry-lumicore", attempt_index)
+        )
+        results.append(
+            _load_public_sequence_result("v2-learning-registry-novalyth", attempt_index)
         )
     report = aggregate_sequence_results(results)
     write_sequence_report_bundle(report, _resolve_output_dir() / "v2_learning")
@@ -272,16 +371,34 @@ def _adaptive_shift_v2_learning_overall_func(llm) -> float:
 
 
 def get_public_kbench_v2_learning_tasks():
+    global adaptive_shift_v2_learning_openai_content
+    global adaptive_shift_v2_learning_openai_entrypoint
+    global adaptive_shift_v2_learning_openai_payload
     global adaptive_shift_v2_learning_openai
+    global adaptive_shift_v2_learning_pandas_stack
+    global adaptive_shift_v2_learning_pandas_columns
+    global adaptive_shift_v2_learning_pandas_order
     global adaptive_shift_v2_learning_pandas
+    global adaptive_shift_v2_learning_registry_zai
+    global adaptive_shift_v2_learning_registry_lumicore
+    global adaptive_shift_v2_learning_registry_novalyth
     global adaptive_shift_v2_learning_registry
     global adaptive_shift_v2_learning_overall
 
     if all(
         task is not None
         for task in (
+            adaptive_shift_v2_learning_openai_content,
+            adaptive_shift_v2_learning_openai_entrypoint,
+            adaptive_shift_v2_learning_openai_payload,
             adaptive_shift_v2_learning_openai,
+            adaptive_shift_v2_learning_pandas_stack,
+            adaptive_shift_v2_learning_pandas_columns,
+            adaptive_shift_v2_learning_pandas_order,
             adaptive_shift_v2_learning_pandas,
+            adaptive_shift_v2_learning_registry_zai,
+            adaptive_shift_v2_learning_registry_lumicore,
+            adaptive_shift_v2_learning_registry_novalyth,
             adaptive_shift_v2_learning_registry,
             adaptive_shift_v2_learning_overall,
         )
@@ -301,11 +418,38 @@ def get_public_kbench_v2_learning_tasks():
             "Import this function inside a Kaggle notebook or an environment with kaggle_benchmarks installed."
         ) from exc
 
+    adaptive_shift_v2_learning_openai_content = kbench.task(name="adaptive_shift_v2_learning_openai_content")(
+        _adaptive_shift_v2_learning_openai_content_func
+    )
+    adaptive_shift_v2_learning_openai_entrypoint = kbench.task(name="adaptive_shift_v2_learning_openai_entrypoint")(
+        _adaptive_shift_v2_learning_openai_entrypoint_func
+    )
+    adaptive_shift_v2_learning_openai_payload = kbench.task(name="adaptive_shift_v2_learning_openai_payload")(
+        _adaptive_shift_v2_learning_openai_payload_func
+    )
     adaptive_shift_v2_learning_openai = kbench.task(name="adaptive_shift_v2_learning_openai")(
         _adaptive_shift_v2_learning_openai_func
     )
+    adaptive_shift_v2_learning_pandas_stack = kbench.task(name="adaptive_shift_v2_learning_pandas_stack")(
+        _adaptive_shift_v2_learning_pandas_stack_func
+    )
+    adaptive_shift_v2_learning_pandas_columns = kbench.task(name="adaptive_shift_v2_learning_pandas_columns")(
+        _adaptive_shift_v2_learning_pandas_columns_func
+    )
+    adaptive_shift_v2_learning_pandas_order = kbench.task(name="adaptive_shift_v2_learning_pandas_order")(
+        _adaptive_shift_v2_learning_pandas_order_func
+    )
     adaptive_shift_v2_learning_pandas = kbench.task(name="adaptive_shift_v2_learning_pandas")(
         _adaptive_shift_v2_learning_pandas_func
+    )
+    adaptive_shift_v2_learning_registry_zai = kbench.task(name="adaptive_shift_v2_learning_registry_zai")(
+        _adaptive_shift_v2_learning_registry_zai_func
+    )
+    adaptive_shift_v2_learning_registry_lumicore = kbench.task(name="adaptive_shift_v2_learning_registry_lumicore")(
+        _adaptive_shift_v2_learning_registry_lumicore_func
+    )
+    adaptive_shift_v2_learning_registry_novalyth = kbench.task(name="adaptive_shift_v2_learning_registry_novalyth")(
+        _adaptive_shift_v2_learning_registry_novalyth_func
     )
     adaptive_shift_v2_learning_registry = kbench.task(name="adaptive_shift_v2_learning_registry")(
         _adaptive_shift_v2_learning_registry_func

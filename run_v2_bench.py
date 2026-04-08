@@ -93,7 +93,7 @@ def main():
     args = parser.parse_args()
 
     workspace_dir = args.workspace_dir or (
-        "workspace/v2_learning_bench_v2_3_b" if args.suite == "v2_learning" else "workspace/v2_bench_v2_1"
+        "workspace/v2_learning_bench_v2_4_b_expanded" if args.suite == "v2_learning" else "workspace/v2_bench_v2_1"
     )
     label = "V2 Learning Sequences" if args.suite == "v2_learning" else "V2 Sequences"
     print(f"\n=== {label}: {args.model} ({args.effort}) ===", flush=True)

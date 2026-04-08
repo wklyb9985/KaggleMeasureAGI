@@ -19,8 +19,8 @@ V2_OVERALL_WEIGHTS = {
 }
 V2_BENCHMARK_VERSION = "2.1"
 V2_COMPARABILITY = "not-comparable-to-pre-fix-v2"
-V2_LEARNING_BENCHMARK_VERSION = "2.3-learning-b"
-V2_LEARNING_COMPARABILITY = "not-comparable-to-prior-v2.2-learning-or-earlier-learning-variants"
+V2_LEARNING_BENCHMARK_VERSION = "2.4-learning-b-expanded"
+V2_LEARNING_COMPARABILITY = "not-comparable-to-prior-v2.3-learning-b-or-earlier-learning-variants"
 V2_LEARNING_SCORE_WEIGHTS = {
     "revision_success": 0.55,
     "transfer_after_revision": 0.30,
@@ -286,7 +286,7 @@ def aggregate_sequence_results(results: Iterable[SequenceResult]) -> dict[str, o
             ),
             "feedback_only_policy": FEEDBACK_ONLY_POLICY,
             "report_mode": "v2_learning_sequences" if benchmark_suite == "v2_learning" else "v2_sequences",
-            "learning_variant": "b" if benchmark_suite == "v2_learning" else None,
+            "learning_variant": "b_expanded" if benchmark_suite == "v2_learning" else None,
             "overall_weights": (
                 dict(V2_LEARNING_SCORE_WEIGHTS) if benchmark_suite == "v2_learning" else dict(V2_OVERALL_WEIGHTS)
             ),

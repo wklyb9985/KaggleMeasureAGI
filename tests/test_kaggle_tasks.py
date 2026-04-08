@@ -186,12 +186,43 @@ class KaggleTaskTests(unittest.TestCase):
             ],
         )
 
-    def test_public_learning_openai_task_writes_deterministic_sequence_report(self):
+    def test_public_learning_family_tasks_expose_variant_subtasks(self):
+        with patched_local_kaggle_benchmarks():
+            module = importlib.import_module("adaptive_shift_bench.kaggle_tasks")
+            importlib.reload(module)
+            module.get_public_kbench_v2_learning_tasks()
+
+        self.assertEqual(
+            self._discover_subtask_names(module.adaptive_shift_v2_learning_openai),
+            [
+                "adaptive_shift_v2_learning_openai_content",
+                "adaptive_shift_v2_learning_openai_entrypoint",
+                "adaptive_shift_v2_learning_openai_payload",
+            ],
+        )
+        self.assertEqual(
+            self._discover_subtask_names(module.adaptive_shift_v2_learning_pandas),
+            [
+                "adaptive_shift_v2_learning_pandas_columns",
+                "adaptive_shift_v2_learning_pandas_order",
+                "adaptive_shift_v2_learning_pandas_stack",
+            ],
+        )
+        self.assertEqual(
+            self._discover_subtask_names(module.adaptive_shift_v2_learning_registry),
+            [
+                "adaptive_shift_v2_learning_registry_lumicore",
+                "adaptive_shift_v2_learning_registry_novalyth",
+                "adaptive_shift_v2_learning_registry_zai",
+            ],
+        )
+
+    def test_public_learning_openai_task_writes_deterministic_sequence_reports(self):
         adapters = {}
 
         def factory(session_key: str):
-            adapter = ScriptedLLMAdapter(
-                [
+            if "v2-learning-openai-revision" in session_key:
+                script = [
                     '{"action":"answer","content":"client.unified.responses.create(model=\'gpt-6-mini\', input=\'status\')"}',
                     '{"action":"search_docs","query":"latest text payload field unified responses content status"}',
                     '{"action":"answer","content":"client.unified.responses.create(model=\'gpt-6-mini\', content=\'status\')"}',
@@ -199,7 +230,25 @@ class KaggleTaskTests(unittest.TestCase):
                     '{"action":"search_docs","query":"中文 接口 统一 响应 创建 模型 内容"}',
                     '{"action":"answer","content":"client.统一.响应.创建(模型=\'gpt-6-mini\', 内容=\'ping\')"}',
                 ]
-            )
+            elif "v2-learning-openai-entrypoint" in session_key:
+                script = [
+                    '{"action":"answer","content":"client.unified.responses.create(model=\'gpt-6-mini\', content=\'summary\')"}',
+                    '{"action":"search_docs","query":"latest response entrypoint submit summary"}',
+                    '{"action":"answer","content":"client.unified.responses.submit(model=\'gpt-6-mini\', content=\'summary\')"}',
+                    '{"action":"answer","content":"client.unified.responses.submit(model=\'gpt-6-mini\', content=\'digest\')"}',
+                    '{"action":"search_docs","query":"中文 接口 统一 响应 提交 模型 内容"}',
+                    '{"action":"answer","content":"client.统一.响应.提交(模型=\'gpt-6-mini\', 内容=\'概览\')"}',
+                ]
+            else:
+                script = [
+                    '{"action":"answer","content":"client.unified.responses.create(model=\'gpt-6-mini\', content=\'check\')"}',
+                    '{"action":"search_docs","query":"latest text body field payload check"}',
+                    '{"action":"answer","content":"client.unified.responses.create(model=\'gpt-6-mini\', payload=\'check\')"}',
+                    '{"action":"answer","content":"client.unified.responses.create(model=\'gpt-6-mini\', payload=\'notice\')"}',
+                    '{"action":"search_docs","query":"中文 接口 统一 响应 创建 模型 载荷"}',
+                    '{"action":"answer","content":"client.统一.响应.创建(模型=\'gpt-6-mini\', 载荷=\'确认\')"}',
+                ]
+            adapter = ScriptedLLMAdapter(script)
             adapters[session_key] = adapter
             return adapter
 
@@ -211,12 +260,16 @@ class KaggleTaskTests(unittest.TestCase):
                     openai_task, _, _, _ = module.get_public_kbench_v2_learning_tasks()
                     llm = LocalTaskLLM(factory)
                     score = openai_task.run(llm=llm, attempt_index=0)
-                    report_path = module._public_sequence_report_path("v2-learning-openai-revision", 0)
-                    payload = report_path.read_text(encoding="utf-8")
+                    report_paths = [
+                        module._public_sequence_report_path("v2-learning-openai-revision", 0),
+                        module._public_sequence_report_path("v2-learning-openai-entrypoint", 0),
+                        module._public_sequence_report_path("v2-learning-openai-payload", 0),
+                    ]
+                    payloads = [path.read_text(encoding="utf-8") for path in report_paths]
 
         self.assertEqual(score, 1.0)
-        self.assertTrue(payload)
-        self.assertEqual(len(adapters), 1)
+        self.assertTrue(all(payloads))
+        self.assertEqual(len(adapters), 3)
 
 
 if __name__ == "__main__":

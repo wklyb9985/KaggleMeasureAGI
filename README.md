@@ -14,8 +14,8 @@ It is built to support:
 
 - New V2 sequence reports are emitted as benchmark version `2.1`.
 - Any older V2 report that does not include `benchmark_metadata.benchmark_version` should be treated as `obsolete_pre_fix_v2` and not compared directly with `2.1` results.
-- The canonical learning suite is now `v2_learning` variant `b`, emitted as benchmark version `2.3-learning-b`.
-- Older learning reports should not be compared directly with `2.3-learning-b`.
+- The canonical learning suite is now the expanded `v2_learning` variant `b_expanded`, emitted as benchmark version `2.4-learning-b-expanded`.
+- Older learning reports should not be compared directly with `2.4-learning-b-expanded`.
 
 ## Layout
 

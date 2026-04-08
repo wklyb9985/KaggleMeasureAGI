@@ -1116,165 +1116,106 @@ def _registry_sequence_worlds() -> tuple[Scenario, ...]:
     )
 
 
-def _openai_learning_sequence_worlds() -> tuple[Scenario, ...]:
-    sequence_id = "v2-learning-openai-revision"
+def _openai_learning_sequence_worlds_from_spec(spec: dict[str, object]) -> tuple[Scenario, ...]:
+    sequence_id = spec["sequence_id"]
+    scenario_prefix = spec["scenario_prefix"]
+    base_prefix = spec["base_prefix"]
+    doc_prefix = spec["doc_prefix"]
+
+    def _payload(expected_call: dict[str, object], *, localized: bool = False) -> dict[str, object]:
+        return {
+            "mock": spec["localized_mock"] if localized else spec["mock"],
+            "expected_call": expected_call,
+            "forbidden_call_paths": spec["localized_forbidden_call_paths"] if localized else spec["forbidden_call_paths"],
+        }
 
     def prior_probe_world(_: str) -> dict:
         return {
-            "base_id": "v2_learning_openai_prior",
-            "package_name": "OpenAI Python SDK",
-            "task_target": (
-                "Assume `client = OpenAI()` already exists. Return only Python code "
-                "that sends `status` to model `gpt-6-mini` using the newest local request shape."
-            ),
+            "base_id": f"{base_prefix}_prior",
+            "package_name": spec["package_name"],
+            "task_target": spec["revision_task_target"],
             "required": (),
-            "forbidden": ("client.responses.create", "input=", "input ="),
+            "forbidden": spec["forbidden_tokens"],
             "docs": (
                 _doc(
-                    "openai-learning-placeholder",
+                    f"{doc_prefix}-placeholder",
                     "Learning placeholder",
                     """
                     No documentation is provided in this probe stage.
                     """,
                 ),
             ),
-            "validator_payload": {
-                "mock": "openai_client_content",
-                "expected_call": {
-                    "path": "client.unified.responses.create",
-                    "kwargs": {"model": "gpt-6-mini", "content": "status"},
-                },
-                "forbidden_call_paths": ("client.responses.create",),
-            },
+            "validator_payload": _payload(spec["expected_revision_call"]),
         }
 
     def revision_world(_: str) -> dict:
         return {
-            "base_id": "v2_learning_openai_revision",
-            "package_name": "OpenAI Python SDK",
-            "task_target": (
-                "Assume `client = OpenAI()` already exists. Return only Python code "
-                "that sends `status` to model `gpt-6-mini` using the newest local request shape."
-            ),
+            "base_id": f"{base_prefix}_revision",
+            "package_name": spec["package_name"],
+            "task_target": spec["revision_task_target"],
             "required": (),
-            "forbidden": ("client.responses.create", "input=", "input ="),
+            "forbidden": spec["forbidden_tokens"],
             "docs": (
                 _doc(
-                    "openai-learning-content-reference",
+                    f"{doc_prefix}-reference",
                     "Latest request shape",
-                    """
-                    Example: client.unified.responses.create(model="gpt-6-mini", content="status")
-                    The latest local request body uses the content field for text payloads.
-                    """,
-                    "openai",
-                    "content",
-                    "status",
-                    "reference",
+                    spec["revision_reference_text"],
+                    *spec["reference_keywords"],
                 ),
                 _doc(
-                    "openai-learning-input-deprecation",
+                    f"{doc_prefix}-notice",
                     "Request shape deprecation",
-                    """
-                    The old input= request field is deprecated in this workspace.
-                    Older request bodies no longer match the local interface.
-                    Use the local docs to find the current text payload field.
-                    """,
-                    "deprecated",
-                    "input",
-                    "request",
+                    spec["revision_notice_text"],
+                    *spec["notice_keywords"],
                 ),
                 _doc(
-                    "openai-learning-content-example",
+                    f"{doc_prefix}-example",
                     "Working local snippet",
-                    """
-                    Runnable local example:
-                    response = client.unified.responses.create(model="gpt-6-mini", content="ready")
-                    print(response)
-                    """,
-                    "example",
-                    "snippet",
-                    "content",
-                    "ready",
+                    spec["revision_example_text"],
+                    *spec["example_keywords"],
                 ),
             ),
-            "validator_payload": {
-                "mock": "openai_client_content",
-                "expected_call": {
-                    "path": "client.unified.responses.create",
-                    "kwargs": {"model": "gpt-6-mini", "content": "status"},
-                },
-                "forbidden_call_paths": ("client.responses.create",),
-            },
+            "validator_payload": _payload(spec["expected_revision_call"]),
         }
 
     def transfer_world(_: str) -> dict:
         return {
-            "base_id": "v2_learning_openai_transfer",
-            "package_name": "OpenAI Python SDK",
-            "task_target": (
-                "Assume `client = OpenAI()` already exists. Return only Python code "
-                "that sends `heartbeat` to model `gpt-6-mini` using the latest local SDK."
-            ),
+            "base_id": f"{base_prefix}_transfer",
+            "package_name": spec["package_name"],
+            "task_target": spec["transfer_task_target"],
             "required": (),
-            "forbidden": ("client.responses.create", "input=", "input ="),
+            "forbidden": spec["forbidden_tokens"],
             "docs": revision_world("sequence")["docs"],
-            "validator_payload": {
-                "mock": "openai_client_content",
-                "expected_call": {
-                    "path": "client.unified.responses.create",
-                    "kwargs": {"model": "gpt-6-mini", "content": "heartbeat"},
-                },
-                "forbidden_call_paths": ("client.responses.create",),
-            },
+            "validator_payload": _payload(spec["expected_transfer_call"]),
         }
 
     def localized_world(_: str) -> dict:
         return {
-            "base_id": "v2_learning_openai_localized",
-            "package_name": "OpenAI 中文本地接口",
-            "task_target": (
-                "假设 `client = OpenAIHan()` 已存在。只返回 Python 代码，"
-                "使用最新中文接口向模型 `gpt-6-mini` 发送 `ping`。"
-            ),
+            "base_id": f"{base_prefix}_localized",
+            "package_name": spec["localized_package_name"],
+            "task_target": spec["localized_task_target"],
             "required": (),
-            "forbidden": ("client.unified.responses.create", "model=", "content="),
+            "forbidden": spec["localized_forbidden_tokens"],
             "docs": (
                 _doc(
-                    "openai-learning-han-reference",
+                    f"{doc_prefix}-han-reference",
                     "中文接口参考",
-                    """
-                    使用 client.统一.响应.创建(模型="gpt-6-mini", 内容="ping")。
-                    中文接口沿用统一响应路径，但字段名和路径名都使用中文映射。
-                    """,
-                    "中文",
-                    "统一",
-                    "响应",
-                    "创建",
-                    "模型",
-                    "内容",
+                    spec["localized_reference_text"],
+                    *spec["localized_reference_keywords"],
                 ),
                 _doc(
-                    "openai-learning-han-notice",
+                    f"{doc_prefix}-han-notice",
                     "Localized surface notice",
-                    """
-                    This localized surface no longer accepts the English path or English field names.
-                    Use the local docs to map the latest unified response rule into the Chinese interface.
-                    """,
+                    spec["localized_notice_text"],
                     "localized",
                     "mapping",
                     "chinese",
                 ),
             ),
-            "validator_payload": {
-                "mock": "openai_han",
-                "expected_call": {
-                    "path": "client.统一.响应.创建",
-                    "kwargs": {"模型": "gpt-6-mini", "内容": "ping"},
-                },
-                "forbidden_call_paths": ("client.unified.responses.create",),
-            },
+            "validator_payload": _payload(spec["expected_localized_call"], localized=True),
         }
 
+    rule_name = spec["rule_name"]
     return (
         _build_scenario(
             ScenarioFamily.API_MIGRATION,
@@ -1283,7 +1224,7 @@ def _openai_learning_sequence_worlds() -> tuple[Scenario, ...]:
             prior_probe_world,
             max_turns=1,
             timeout_s=DEFAULT_TIMEOUT_S,
-            scenario_id="v2-learning-api-openai-prior-probe",
+            scenario_id=f"{scenario_prefix}-prior-probe",
             sequence_id=sequence_id,
             sequence_stage=SequenceStage.TEACH,
             ideal_turns=1,
@@ -1296,10 +1237,10 @@ def _openai_learning_sequence_worlds() -> tuple[Scenario, ...]:
             revision_world,
             max_turns=6,
             timeout_s=DEFAULT_TIMEOUT_S,
-            scenario_id="v2-learning-api-openai-revision",
+            scenario_id=f"{scenario_prefix}-revision",
             sequence_id=sequence_id,
             sequence_stage=SequenceStage.ADAPT,
-            teaches_rules=("openai.content_field",),
+            teaches_rules=(rule_name,),
             ideal_turns=2,
             benchmark_suite="v2_learning",
         ),
@@ -1310,10 +1251,10 @@ def _openai_learning_sequence_worlds() -> tuple[Scenario, ...]:
             transfer_world,
             max_turns=TRANSFER_ONLY_MAX_TURNS,
             timeout_s=DEFAULT_TIMEOUT_S,
-            scenario_id="v2-learning-api-openai-transfer",
+            scenario_id=f"{scenario_prefix}-transfer",
             sequence_id=sequence_id,
             sequence_stage=SequenceStage.TRANSFER,
-            depends_on_rules=("openai.content_field",),
+            depends_on_rules=(rule_name,),
             ideal_turns=1,
             benchmark_suite="v2_learning",
         ),
@@ -1324,179 +1265,323 @@ def _openai_learning_sequence_worlds() -> tuple[Scenario, ...]:
             localized_world,
             max_turns=6,
             timeout_s=DEFAULT_TIMEOUT_S,
-            scenario_id="v2-learning-localized-openai-generalization",
+            scenario_id=f"{scenario_prefix}-localized-generalization",
             sequence_id=sequence_id,
             sequence_stage=SequenceStage.CAPSTONE,
             language_surface=LanguageSurface.CHINESE,
-            depends_on_rules=("openai.content_field",),
+            depends_on_rules=(rule_name,),
             ideal_turns=2,
             benchmark_suite="v2_learning",
         ),
     )
 
 
-def _pandas_learning_sequence_worlds() -> tuple[Scenario, ...]:
-    sequence_id = "v2-learning-pandas-revision"
+_OPENAI_LEARNING_VARIANT_SPECS: tuple[dict[str, object], ...] = (
+    {
+        "sequence_id": "v2-learning-openai-revision",
+        "scenario_prefix": "v2-learning-api-openai",
+        "base_prefix": "v2_learning_openai",
+        "doc_prefix": "openai-learning",
+        "package_name": "OpenAI Python SDK",
+        "localized_package_name": "OpenAI 中文本地接口",
+        "mock": "openai_client_content",
+        "localized_mock": "openai_han",
+        "rule_name": "openai.content_field",
+        "revision_task_target": (
+            "Assume `client = OpenAI()` already exists. Return only Python code "
+            "that sends `status` to model `gpt-6-mini` using the newest local request shape."
+        ),
+        "transfer_task_target": (
+            "Assume `client = OpenAI()` already exists. Return only Python code "
+            "that sends `heartbeat` to model `gpt-6-mini` using the latest local SDK."
+        ),
+        "localized_task_target": (
+            "假设 `client = OpenAIHan()` 已存在。只返回 Python 代码，"
+            "使用最新中文接口向模型 `gpt-6-mini` 发送 `ping`。"
+        ),
+        "forbidden_tokens": ("client.responses.create", "input=", "input ="),
+        "localized_forbidden_tokens": ("client.unified.responses.create", "model=", "content="),
+        "forbidden_call_paths": ("client.responses.create",),
+        "localized_forbidden_call_paths": ("client.unified.responses.create",),
+        "expected_revision_call": {
+            "path": "client.unified.responses.create",
+            "kwargs": {"model": "gpt-6-mini", "content": "status"},
+        },
+        "expected_transfer_call": {
+            "path": "client.unified.responses.create",
+            "kwargs": {"model": "gpt-6-mini", "content": "heartbeat"},
+        },
+        "expected_localized_call": {
+            "path": "client.统一.响应.创建",
+            "kwargs": {"模型": "gpt-6-mini", "内容": "ping"},
+        },
+        "revision_reference_text": """
+            Example: client.unified.responses.create(model="gpt-6-mini", content="status")
+            The latest local request body uses the content field for text payloads.
+            """,
+        "revision_notice_text": """
+            The old input= request field is deprecated in this workspace.
+            Older request bodies no longer match the local interface.
+            Use the local docs to find the current text payload field.
+            """,
+        "revision_example_text": """
+            Runnable local example:
+            response = client.unified.responses.create(model="gpt-6-mini", content="ready")
+            print(response)
+            """,
+        "localized_reference_text": """
+            使用 client.统一.响应.创建(模型="gpt-6-mini", 内容="ping")。
+            中文接口沿用统一响应路径，但字段名和路径名都使用中文映射。
+            """,
+        "localized_notice_text": """
+            This localized surface no longer accepts the English path or English field names.
+            Use the local docs to map the latest unified response rule into the Chinese interface.
+            """,
+        "reference_keywords": ("openai", "content", "status", "reference"),
+        "notice_keywords": ("deprecated", "input", "request"),
+        "example_keywords": ("example", "snippet", "content", "ready"),
+        "localized_reference_keywords": ("中文", "统一", "响应", "创建", "模型", "内容"),
+    },
+    {
+        "sequence_id": "v2-learning-openai-entrypoint",
+        "scenario_prefix": "v2-learning-api-openai-entrypoint",
+        "base_prefix": "v2_learning_openai_entrypoint",
+        "doc_prefix": "openai-learning-entrypoint",
+        "package_name": "OpenAI Python SDK",
+        "localized_package_name": "OpenAI 中文本地接口",
+        "mock": "openai_client_content",
+        "localized_mock": "openai_han",
+        "rule_name": "openai.submit_entrypoint",
+        "revision_task_target": (
+            "Assume `client = OpenAI()` already exists. Return only Python code "
+            "that sends `summary` to model `gpt-6-mini` using the newest local response entrypoint."
+        ),
+        "transfer_task_target": (
+            "Assume `client = OpenAI()` already exists. Return only Python code "
+            "that sends `digest` to model `gpt-6-mini` using the newest local response entrypoint."
+        ),
+        "localized_task_target": (
+            "假设 `client = OpenAIHan()` 已存在。只返回 Python 代码，"
+            "使用最新中文接口向模型 `gpt-6-mini` 发送 `概览`。"
+        ),
+        "forbidden_tokens": ("client.responses.create", "client.unified.responses.create"),
+        "localized_forbidden_tokens": (
+            "client.unified.responses.submit",
+            "client.unified.responses.create",
+            "model=",
+            "content=",
+        ),
+        "forbidden_call_paths": ("client.responses.create", "client.unified.responses.create"),
+        "localized_forbidden_call_paths": ("client.unified.responses.submit", "client.unified.responses.create"),
+        "expected_revision_call": {
+            "path": "client.unified.responses.submit",
+            "kwargs": {"model": "gpt-6-mini", "content": "summary"},
+        },
+        "expected_transfer_call": {
+            "path": "client.unified.responses.submit",
+            "kwargs": {"model": "gpt-6-mini", "content": "digest"},
+        },
+        "expected_localized_call": {
+            "path": "client.统一.响应.提交",
+            "kwargs": {"模型": "gpt-6-mini", "内容": "概览"},
+        },
+        "revision_reference_text": """
+            Example: client.unified.responses.submit(model="gpt-6-mini", content="summary")
+            The latest local SDK uses the submit entrypoint for text responses.
+            """,
+        "revision_notice_text": """
+            Older entrypoints such as client.unified.responses.create are deprecated in this workspace.
+            Use the local docs to find the current response entrypoint.
+            """,
+        "revision_example_text": """
+            Runnable local example:
+            response = client.unified.responses.submit(model="gpt-6-mini", content="ready")
+            print(response)
+            """,
+        "localized_reference_text": """
+            使用 client.统一.响应.提交(模型="gpt-6-mini", 内容="概览")。
+            中文接口沿用新的响应入口，并保留中文字段映射。
+            """,
+        "localized_notice_text": """
+            This localized surface no longer accepts the older English response entrypoints.
+            Use the local docs to map the latest submit entrypoint into the Chinese interface.
+            """,
+        "reference_keywords": ("openai", "submit", "summary", "entrypoint"),
+        "notice_keywords": ("deprecated", "entrypoint", "create"),
+        "example_keywords": ("example", "snippet", "submit", "ready"),
+        "localized_reference_keywords": ("中文", "统一", "响应", "提交", "模型", "内容"),
+    },
+    {
+        "sequence_id": "v2-learning-openai-payload",
+        "scenario_prefix": "v2-learning-api-openai-payload",
+        "base_prefix": "v2_learning_openai_payload",
+        "doc_prefix": "openai-learning-payload",
+        "package_name": "OpenAI Python SDK",
+        "localized_package_name": "OpenAI 中文本地接口",
+        "mock": "openai_client_content",
+        "localized_mock": "openai_han",
+        "rule_name": "openai.payload_field",
+        "revision_task_target": (
+            "Assume `client = OpenAI()` already exists. Return only Python code "
+            "that sends `check` to model `gpt-6-mini` using the newest local text-body field."
+        ),
+        "transfer_task_target": (
+            "Assume `client = OpenAI()` already exists. Return only Python code "
+            "that sends `notice` to model `gpt-6-mini` using the newest local text-body field."
+        ),
+        "localized_task_target": (
+            "假设 `client = OpenAIHan()` 已存在。只返回 Python 代码，"
+            "使用最新中文接口向模型 `gpt-6-mini` 发送 `确认`。"
+        ),
+        "forbidden_tokens": ("client.responses.create", "content=", "content ="),
+        "localized_forbidden_tokens": ("client.unified.responses.create", "model=", "content=", "payload="),
+        "forbidden_call_paths": ("client.responses.create",),
+        "localized_forbidden_call_paths": ("client.unified.responses.create",),
+        "expected_revision_call": {
+            "path": "client.unified.responses.create",
+            "kwargs": {"model": "gpt-6-mini", "payload": "check"},
+        },
+        "expected_transfer_call": {
+            "path": "client.unified.responses.create",
+            "kwargs": {"model": "gpt-6-mini", "payload": "notice"},
+        },
+        "expected_localized_call": {
+            "path": "client.统一.响应.创建",
+            "kwargs": {"模型": "gpt-6-mini", "载荷": "确认"},
+        },
+        "revision_reference_text": """
+            Example: client.unified.responses.create(model="gpt-6-mini", payload="check")
+            The latest local request body uses the payload field for plain text.
+            """,
+        "revision_notice_text": """
+            The older content= request field is deprecated in this workspace.
+            Use the local docs to find the current plain-text body field.
+            """,
+        "revision_example_text": """
+            Runnable local example:
+            response = client.unified.responses.create(model="gpt-6-mini", payload="ready")
+            print(response)
+            """,
+        "localized_reference_text": """
+            使用 client.统一.响应.创建(模型="gpt-6-mini", 载荷="确认")。
+            中文接口保留统一响应路径，但文本字段映射为 载荷。
+            """,
+        "localized_notice_text": """
+            This localized surface no longer accepts English field names or the older content field.
+            Use the local docs to map the latest payload rule into the Chinese interface.
+            """,
+        "reference_keywords": ("openai", "payload", "check", "reference"),
+        "notice_keywords": ("deprecated", "content", "payload"),
+        "example_keywords": ("example", "snippet", "payload", "ready"),
+        "localized_reference_keywords": ("中文", "统一", "响应", "创建", "模型", "载荷"),
+    },
+)
+
+
+def _openai_learning_sequence_worlds() -> tuple[Scenario, ...]:
+    return _openai_learning_sequence_worlds_from_spec(_OPENAI_LEARNING_VARIANT_SPECS[0])
+
+
+def _pandas_learning_sequence_worlds_from_spec(spec: dict[str, object]) -> tuple[Scenario, ...]:
+    sequence_id = spec["sequence_id"]
+    scenario_prefix = spec["scenario_prefix"]
+    base_prefix = spec["base_prefix"]
+    doc_prefix = spec["doc_prefix"]
+
+    def _payload(expected_call: dict[str, object], *, localized: bool = False) -> dict[str, object]:
+        return {
+            "mock": spec["localized_mock"] if localized else spec["mock"],
+            "expected_call": expected_call,
+            "forbidden_call_paths": spec["localized_forbidden_call_paths"] if localized else spec["forbidden_call_paths"],
+        }
 
     def prior_probe_world(_: str) -> dict:
         return {
-            "base_id": "v2_learning_pandas_prior",
-            "package_name": "pandas",
-            "task_target": (
-                "Assume `pandas_cn`, `left`, and `right` already exist. Return only Python code "
-                "that uses the latest local compatibility layer to vertically combine `left` and `right` while resetting the index."
-            ),
+            "base_id": f"{base_prefix}_prior",
+            "package_name": spec["package_name"],
+            "task_target": spec["revision_task_target"],
             "required": (),
-            "forbidden": ("pandas_cn.concat_rows", "pd.concat", "ignore_index=True"),
+            "forbidden": spec["forbidden_tokens"],
             "docs": (
                 _doc(
-                    "pandas-learning-placeholder",
+                    f"{doc_prefix}-placeholder",
                     "Learning placeholder",
                     """
                     No documentation is provided in this probe stage.
                     """,
                 ),
             ),
-            "validator_payload": {
-                "mock": "pandas_cn_stack",
-                "expected_call": {
-                    "path": "pandas_cn.stack_rows",
-                    "args": [[_name("left"), _name("right")]],
-                    "kwargs": {"reset_index": True},
-                },
-                "forbidden_call_paths": ("pandas_cn.concat_rows", "pd.concat", "pandas.concat"),
-            },
+            "validator_payload": _payload(spec["expected_revision_call"]),
         }
 
     def revision_world(_: str) -> dict:
         return {
-            "base_id": "v2_learning_pandas_revision",
-            "package_name": "pandas",
-            "task_target": (
-                "Assume `pandas_cn`, `left`, and `right` already exist. Return only Python code "
-                "that uses the latest local compatibility layer to vertically combine `left` and `right` while resetting the index."
-            ),
+            "base_id": f"{base_prefix}_revision",
+            "package_name": spec["package_name"],
+            "task_target": spec["revision_task_target"],
             "required": (),
-            "forbidden": ("pandas_cn.concat_rows", "pd.concat", "ignore_index=True"),
+            "forbidden": spec["forbidden_tokens"],
             "docs": (
                 _doc(
-                    "pandas-learning-stack-reference",
+                    f"{doc_prefix}-reference",
                     "Latest wrapper reference",
-                    """
-                    concat_rows -> stack_rows
-                    ignore_index -> reset_index
-                    Use pandas_cn.stack_rows([left, right], reset_index=True).
-                    """,
-                    "pandas",
-                    "stack_rows",
-                    "reset_index",
-                    "reference",
+                    spec["revision_reference_text"],
+                    *spec["reference_keywords"],
                 ),
                 _doc(
-                    "pandas-learning-stack-notice",
+                    f"{doc_prefix}-notice",
                     "Compatibility layer notice",
-                    """
-                    concat_rows and ignore_index are deprecated in this workspace.
-                    Use the latest compatibility-layer docs to find the replacement names.
-                    """,
-                    "deprecated",
-                    "concat_rows",
-                    "ignore_index",
+                    spec["revision_notice_text"],
+                    *spec["notice_keywords"],
                 ),
                 _doc(
-                    "pandas-learning-stack-example",
+                    f"{doc_prefix}-example",
                     "Working local snippet",
-                    """
-                    Runnable local example:
-                    combined = pandas_cn.stack_rows([orders_a, orders_b], reset_index=True)
-                    print(combined)
-                    """,
-                    "example",
-                    "stack_rows",
-                    "reset_index",
-                    "orders_a",
-                    "orders_b",
+                    spec["revision_example_text"],
+                    *spec["example_keywords"],
                 ),
             ),
-            "validator_payload": {
-                "mock": "pandas_cn_stack",
-                "expected_call": {
-                    "path": "pandas_cn.stack_rows",
-                    "args": [[_name("left"), _name("right")]],
-                    "kwargs": {"reset_index": True},
-                },
-                "forbidden_call_paths": ("pandas_cn.concat_rows", "pd.concat", "pandas.concat"),
-            },
+            "validator_payload": _payload(spec["expected_revision_call"]),
         }
 
     def transfer_world(_: str) -> dict:
         return {
-            "base_id": "v2_learning_pandas_transfer",
-            "package_name": "pandas",
-            "task_target": (
-                "Assume `pandas_cn`, `left`, and `right` already exist. Return only Python code "
-                "that uses the latest local compatibility layer to vertically combine `left` and `right` while resetting the index."
-            ),
+            "base_id": f"{base_prefix}_transfer",
+            "package_name": spec["package_name"],
+            "task_target": spec["transfer_task_target"],
             "required": (),
-            "forbidden": ("pandas_cn.concat_rows", "pd.concat", "ignore_index=True"),
+            "forbidden": spec["forbidden_tokens"],
             "docs": revision_world("sequence")["docs"],
-            "validator_payload": {
-                "mock": "pandas_cn_stack",
-                "expected_call": {
-                    "path": "pandas_cn.stack_rows",
-                    "args": [[_name("left"), _name("right")]],
-                    "kwargs": {"reset_index": True},
-                },
-                "forbidden_call_paths": ("pandas_cn.concat_rows", "pd.concat", "pandas.concat"),
-            },
+            "validator_payload": _payload(spec["expected_transfer_call"]),
         }
 
     def localized_world(_: str) -> dict:
         return {
-            "base_id": "v2_learning_pandas_localized",
-            "package_name": "pandas 中文兼容层",
-            "task_target": (
-                "假设 `表格层`、`left` 和 `right` 已存在。只返回 Python 代码，"
-                "使用中文接口纵向合并 `left` 与 `right`，并忽略旧索引。"
-            ),
+            "base_id": f"{base_prefix}_localized",
+            "package_name": spec["localized_package_name"],
+            "task_target": spec["localized_task_target"],
             "required": (),
-            "forbidden": ("pandas_cn.stack_rows", "reset_index=True", "ignore_index=True"),
+            "forbidden": spec["localized_forbidden_tokens"],
             "docs": (
                 _doc(
-                    "pandas-learning-han-reference",
+                    f"{doc_prefix}-han-reference",
                     "中文包装层参考",
-                    """
-                    中文包装层使用 表格层.合并行([left, right], 忽略索引=True)。
-                    stack_rows -> 合并行
-                    reset_index -> 忽略索引
-                    """,
-                    "中文",
-                    "合并行",
-                    "忽略索引",
+                    spec["localized_reference_text"],
+                    *spec["localized_reference_keywords"],
                 ),
                 _doc(
-                    "pandas-learning-han-notice",
+                    f"{doc_prefix}-han-notice",
                     "Localized wrapper notice",
-                    """
-                    This localized wrapper surface no longer accepts the English wrapper names.
-                    Use the local docs to map the latest stack_rows rule into the Chinese interface.
-                    """,
+                    spec["localized_notice_text"],
                     "localized",
                     "wrapper",
                     "mapping",
                 ),
             ),
-            "validator_payload": {
-                "mock": "pandas_han",
-                "expected_call": {
-                    "path": "表格层.合并行",
-                    "args": [[_name("left"), _name("right")]],
-                    "kwargs": {"忽略索引": True},
-                },
-                "forbidden_call_paths": ("pandas_cn.stack_rows", "pandas_cn.concat_rows"),
-            },
+            "validator_payload": _payload(spec["expected_localized_call"], localized=True),
         }
 
+    rule_name = spec["rule_name"]
     return (
         _build_scenario(
             ScenarioFamily.DSL_WRAPPER,
@@ -1505,7 +1590,7 @@ def _pandas_learning_sequence_worlds() -> tuple[Scenario, ...]:
             prior_probe_world,
             max_turns=1,
             timeout_s=DEFAULT_TIMEOUT_S,
-            scenario_id="v2-learning-dsl-pandas-prior-probe",
+            scenario_id=f"{scenario_prefix}-prior-probe",
             sequence_id=sequence_id,
             sequence_stage=SequenceStage.TEACH,
             ideal_turns=1,
@@ -1518,10 +1603,10 @@ def _pandas_learning_sequence_worlds() -> tuple[Scenario, ...]:
             revision_world,
             max_turns=6,
             timeout_s=DEFAULT_TIMEOUT_S,
-            scenario_id="v2-learning-dsl-pandas-revision",
+            scenario_id=f"{scenario_prefix}-revision",
             sequence_id=sequence_id,
             sequence_stage=SequenceStage.ADAPT,
-            teaches_rules=("pandas.stack_rows",),
+            teaches_rules=(rule_name,),
             ideal_turns=2,
             benchmark_suite="v2_learning",
         ),
@@ -1532,10 +1617,10 @@ def _pandas_learning_sequence_worlds() -> tuple[Scenario, ...]:
             transfer_world,
             max_turns=TRANSFER_ONLY_MAX_TURNS,
             timeout_s=DEFAULT_TIMEOUT_S,
-            scenario_id="v2-learning-dsl-pandas-transfer",
+            scenario_id=f"{scenario_prefix}-transfer",
             sequence_id=sequence_id,
             sequence_stage=SequenceStage.TRANSFER,
-            depends_on_rules=("pandas.stack_rows",),
+            depends_on_rules=(rule_name,),
             ideal_turns=1,
             benchmark_suite="v2_learning",
         ),
@@ -1546,15 +1631,231 @@ def _pandas_learning_sequence_worlds() -> tuple[Scenario, ...]:
             localized_world,
             max_turns=6,
             timeout_s=DEFAULT_TIMEOUT_S,
-            scenario_id="v2-learning-localized-pandas-generalization",
+            scenario_id=f"{scenario_prefix}-localized-generalization",
             sequence_id=sequence_id,
             sequence_stage=SequenceStage.CAPSTONE,
             language_surface=LanguageSurface.CHINESE,
-            depends_on_rules=("pandas.stack_rows",),
+            depends_on_rules=(rule_name,),
             ideal_turns=2,
             benchmark_suite="v2_learning",
         ),
     )
+
+
+_PANDAS_LEARNING_VARIANT_SPECS: tuple[dict[str, object], ...] = (
+    {
+        "sequence_id": "v2-learning-pandas-revision",
+        "scenario_prefix": "v2-learning-dsl-pandas",
+        "base_prefix": "v2_learning_pandas",
+        "doc_prefix": "pandas-learning",
+        "package_name": "pandas",
+        "localized_package_name": "pandas 中文兼容层",
+        "mock": "pandas_cn_stack",
+        "localized_mock": "pandas_han",
+        "rule_name": "pandas.stack_rows",
+        "revision_task_target": (
+            "Assume `pandas_cn`, `left`, and `right` already exist. Return only Python code "
+            "that uses the latest local compatibility layer to vertically combine `left` and `right` while resetting the index."
+        ),
+        "transfer_task_target": (
+            "Assume `pandas_cn`, `left`, and `right` already exist. Return only Python code "
+            "that uses the latest local compatibility layer to vertically combine `left` and `right` while resetting the index."
+        ),
+        "localized_task_target": (
+            "假设 `表格层`、`left` 和 `right` 已存在。只返回 Python 代码，"
+            "使用中文接口纵向合并 `left` 与 `right`，并忽略旧索引。"
+        ),
+        "forbidden_tokens": ("pandas_cn.concat_rows", "pd.concat", "ignore_index=True"),
+        "localized_forbidden_tokens": ("pandas_cn.stack_rows", "reset_index=True", "ignore_index=True"),
+        "forbidden_call_paths": ("pandas_cn.concat_rows", "pd.concat", "pandas.concat"),
+        "localized_forbidden_call_paths": ("pandas_cn.stack_rows", "pandas_cn.concat_rows"),
+        "expected_revision_call": {
+            "path": "pandas_cn.stack_rows",
+            "args": [[_name("left"), _name("right")]],
+            "kwargs": {"reset_index": True},
+        },
+        "expected_transfer_call": {
+            "path": "pandas_cn.stack_rows",
+            "args": [[_name("left"), _name("right")]],
+            "kwargs": {"reset_index": True},
+        },
+        "expected_localized_call": {
+            "path": "表格层.合并行",
+            "args": [[_name("left"), _name("right")]],
+            "kwargs": {"忽略索引": True},
+        },
+        "revision_reference_text": """
+            concat_rows -> stack_rows
+            ignore_index -> reset_index
+            Use pandas_cn.stack_rows([left, right], reset_index=True).
+            """,
+        "revision_notice_text": """
+            concat_rows and ignore_index are deprecated in this workspace.
+            Use the latest compatibility-layer docs to find the replacement names.
+            """,
+        "revision_example_text": """
+            Runnable local example:
+            combined = pandas_cn.stack_rows([orders_a, orders_b], reset_index=True)
+            print(combined)
+            """,
+        "localized_reference_text": """
+            中文包装层使用 表格层.合并行([left, right], 忽略索引=True)。
+            stack_rows -> 合并行
+            reset_index -> 忽略索引
+            """,
+        "localized_notice_text": """
+            This localized wrapper surface no longer accepts the English wrapper names.
+            Use the local docs to map the latest stack_rows rule into the Chinese interface.
+            """,
+        "reference_keywords": ("pandas", "stack_rows", "reset_index", "reference"),
+        "notice_keywords": ("deprecated", "concat_rows", "ignore_index"),
+        "example_keywords": ("example", "stack_rows", "reset_index", "orders_a", "orders_b"),
+        "localized_reference_keywords": ("中文", "合并行", "忽略索引"),
+    },
+    {
+        "sequence_id": "v2-learning-pandas-columns",
+        "scenario_prefix": "v2-learning-dsl-pandas-columns",
+        "base_prefix": "v2_learning_pandas_columns",
+        "doc_prefix": "pandas-learning-columns",
+        "package_name": "pandas",
+        "localized_package_name": "pandas 中文兼容层",
+        "mock": "pandas_cn_columns",
+        "localized_mock": "pandas_han_columns",
+        "rule_name": "pandas.pick_columns",
+        "revision_task_target": (
+            "Assume `pandas_cn` and `sales` already exist. Return only Python code "
+            "that uses the latest local compatibility layer to keep columns `['city', 'revenue']` from `sales`."
+        ),
+        "transfer_task_target": (
+            "Assume `pandas_cn` and `sales` already exist. Return only Python code "
+            "that uses the latest local compatibility layer to keep columns `['city', 'margin']` from `sales`."
+        ),
+        "localized_task_target": (
+            "假设 `表格层` 和 `sales` 已存在。只返回 Python 代码，"
+            "使用中文接口保留 `sales` 中的列 `['city', 'revenue']`。"
+        ),
+        "forbidden_tokens": ("pandas_cn.select_cols", "names=", "names ="),
+        "localized_forbidden_tokens": ("pandas_cn.pick_columns", "columns=", "names="),
+        "forbidden_call_paths": ("pandas_cn.select_cols",),
+        "localized_forbidden_call_paths": ("pandas_cn.pick_columns", "pandas_cn.select_cols"),
+        "expected_revision_call": {
+            "path": "pandas_cn.pick_columns",
+            "args": [_name("sales")],
+            "kwargs": {"columns": ["city", "revenue"]},
+        },
+        "expected_transfer_call": {
+            "path": "pandas_cn.pick_columns",
+            "args": [_name("sales")],
+            "kwargs": {"columns": ["city", "margin"]},
+        },
+        "expected_localized_call": {
+            "path": "表格层.取列",
+            "args": [_name("sales")],
+            "kwargs": {"列": ["city", "revenue"]},
+        },
+        "revision_reference_text": """
+            select_cols -> pick_columns
+            names -> columns
+            Use pandas_cn.pick_columns(sales, columns=["city", "revenue"]).
+            """,
+        "revision_notice_text": """
+            select_cols and names= are deprecated in this workspace.
+            Use the latest compatibility-layer docs to find the replacement names.
+            """,
+        "revision_example_text": """
+            Runnable local example:
+            subset = pandas_cn.pick_columns(orders, columns=["city", "units"])
+            print(subset)
+            """,
+        "localized_reference_text": """
+            中文包装层使用 表格层.取列(sales, 列=["city", "revenue"])。
+            pick_columns -> 取列
+            columns -> 列
+            """,
+        "localized_notice_text": """
+            This localized wrapper surface no longer accepts the English wrapper names.
+            Use the local docs to map the latest pick_columns rule into the Chinese interface.
+            """,
+        "reference_keywords": ("pandas", "pick_columns", "columns", "reference"),
+        "notice_keywords": ("deprecated", "select_cols", "names"),
+        "example_keywords": ("example", "pick_columns", "columns", "orders"),
+        "localized_reference_keywords": ("中文", "取列", "列"),
+    },
+    {
+        "sequence_id": "v2-learning-pandas-order",
+        "scenario_prefix": "v2-learning-dsl-pandas-order",
+        "base_prefix": "v2_learning_pandas_order",
+        "doc_prefix": "pandas-learning-order",
+        "package_name": "pandas",
+        "localized_package_name": "pandas 中文兼容层",
+        "mock": "pandas_cn_order",
+        "localized_mock": "pandas_han_order",
+        "rule_name": "pandas.order_rows",
+        "revision_task_target": (
+            "Assume `pandas_cn` and `sales` already exist. Return only Python code "
+            "that uses the latest local compatibility layer to sort `sales` by `revenue` in descending order."
+        ),
+        "transfer_task_target": (
+            "Assume `pandas_cn` and `sales` already exist. Return only Python code "
+            "that uses the latest local compatibility layer to sort `sales` by `margin` in descending order."
+        ),
+        "localized_task_target": (
+            "假设 `表格层` 和 `sales` 已存在。只返回 Python 代码，"
+            "使用中文接口按 `revenue` 对 `sales` 做降序排序。"
+        ),
+        "forbidden_tokens": ("pandas_cn.sort_rows", "sort_values", "ascending=False"),
+        "localized_forbidden_tokens": ("pandas_cn.order_rows", "descending=True", "ascending=False"),
+        "forbidden_call_paths": ("pandas_cn.sort_rows", "sort_values"),
+        "localized_forbidden_call_paths": ("pandas_cn.order_rows", "pandas_cn.sort_rows"),
+        "expected_revision_call": {
+            "path": "pandas_cn.order_rows",
+            "args": [_name("sales")],
+            "kwargs": {"key": "revenue", "descending": True},
+        },
+        "expected_transfer_call": {
+            "path": "pandas_cn.order_rows",
+            "args": [_name("sales")],
+            "kwargs": {"key": "margin", "descending": True},
+        },
+        "expected_localized_call": {
+            "path": "表格层.排序行",
+            "args": [_name("sales")],
+            "kwargs": {"键": "revenue", "降序": True},
+        },
+        "revision_reference_text": """
+            sort_rows -> order_rows
+            ascending=False -> descending=True
+            Use pandas_cn.order_rows(sales, key="revenue", descending=True).
+            """,
+        "revision_notice_text": """
+            sort_rows and ascending=False are deprecated in this workspace.
+            Use the latest compatibility-layer docs to find the replacement names.
+            """,
+        "revision_example_text": """
+            Runnable local example:
+            ranked = pandas_cn.order_rows(report, key="score", descending=True)
+            print(ranked)
+            """,
+        "localized_reference_text": """
+            中文包装层使用 表格层.排序行(sales, 键="revenue", 降序=True)。
+            order_rows -> 排序行
+            key -> 键
+            descending -> 降序
+            """,
+        "localized_notice_text": """
+            This localized wrapper surface no longer accepts the English wrapper names.
+            Use the local docs to map the latest order_rows rule into the Chinese interface.
+            """,
+        "reference_keywords": ("pandas", "order_rows", "descending", "reference"),
+        "notice_keywords": ("deprecated", "sort_rows", "ascending"),
+        "example_keywords": ("example", "order_rows", "descending", "report"),
+        "localized_reference_keywords": ("中文", "排序行", "键", "降序"),
+    },
+)
+
+
+def _pandas_learning_sequence_worlds() -> tuple[Scenario, ...]:
+    return _pandas_learning_sequence_worlds_from_spec(_PANDAS_LEARNING_VARIANT_SPECS[0])
 
 
 def _registry_learning_sequence_worlds_from_spec(spec: dict[str, str]) -> tuple[Scenario, ...]:
@@ -1754,42 +2055,113 @@ def _registry_learning_sequence_worlds_from_spec(spec: dict[str, str]) -> tuple[
 
 
 def _registry_learning_sequence_worlds() -> tuple[Scenario, ...]:
-    return _registry_learning_sequence_worlds_from_spec(
-        {
-            "sequence_id": "v2-learning-registry-revision",
-            "scenario_prefix": "v2-learning-registry",
-            "base_prefix": "v2_learning_registry",
-            "doc_prefix": "registry-learning",
-            "package_name": "Z.ai",
-            "localized_package_name": "Z.ai 中文注册表",
-            "request_small": "glm-8-small",
-            "request_lite": "glm-8-lite",
-            "request_mini": "glm-8-mini",
-            "fallback_model": "glm-7-air-preview",
-            "deprecated_default": "glm-4.5-air",
-            "revision_reference_text": """
-                glm-8-small is not registered locally.
-                Use glm-7-air-preview as the sanctioned fallback for glm-8 small-class requests.
-                """,
-            "revision_notice_text": """
-                The requested glm-8 small-class model is not registered locally.
-                Older defaults such as glm-4.5-air are deprecated for this route.
-                Use the local docs to find the sanctioned fallback.
-                """,
-            "revision_example_text": """
-                Runnable local example:
-                payload = {"model": "approved-fallback-model"}
-                print(payload)
-                The payload must be a JSON object with a single model field.
-                Use the fallback table to replace approved-fallback-model with the sanctioned local model.
-                """,
-            "localized_reference_text": """
-                glm-8-mini 未在本地注册。
-                对 glm-8 mini 类请求，批准的回退模型是 glm-7-air-preview。
-                最终 JSON 字段必须写成 模型。
-                """,
-        }
-    )
+    return _registry_learning_sequence_worlds_from_spec(_REGISTRY_LEARNING_VARIANT_SPECS[0])
+
+
+_REGISTRY_LEARNING_VARIANT_SPECS: tuple[dict[str, str], ...] = (
+    {
+        "sequence_id": "v2-learning-registry-revision",
+        "scenario_prefix": "v2-learning-registry",
+        "base_prefix": "v2_learning_registry",
+        "doc_prefix": "registry-learning",
+        "package_name": "Z.ai",
+        "localized_package_name": "Z.ai 中文注册表",
+        "request_small": "glm-8-small",
+        "request_lite": "glm-8-lite",
+        "request_mini": "glm-8-mini",
+        "fallback_model": "glm-7-air-preview",
+        "deprecated_default": "glm-4.5-air",
+        "revision_reference_text": """
+            glm-8-small is not registered locally.
+            Use glm-7-air-preview as the sanctioned fallback for glm-8 small-class requests.
+            """,
+        "revision_notice_text": """
+            The requested glm-8 small-class model is not registered locally.
+            Older defaults such as glm-4.5-air are deprecated for this route.
+            Use the local docs to find the sanctioned fallback.
+            """,
+        "revision_example_text": """
+            Runnable local example:
+            payload = {"model": "approved-fallback-model"}
+            print(payload)
+            The payload must be a JSON object with a single model field.
+            Use the fallback table to replace approved-fallback-model with the sanctioned local model.
+            """,
+        "localized_reference_text": """
+            glm-8-mini 未在本地注册。
+            对 glm-8 mini 类请求，批准的回退模型是 glm-7-air-preview。
+            最终 JSON 字段必须写成 模型。
+            """,
+    },
+    {
+        "sequence_id": "v2-learning-registry-lumicore",
+        "scenario_prefix": "v2-learning-registry-lumicore",
+        "base_prefix": "v2_learning_registry_lumicore",
+        "doc_prefix": "registry-learning-lumicore",
+        "package_name": "Lumicore AI (fictional company founded in 2026)",
+        "localized_package_name": "Lumicore AI 中文注册表（虚构公司，成立于 2026 年）",
+        "request_small": "lumicore-9-small",
+        "request_lite": "lumicore-9-lite",
+        "request_mini": "lumicore-9-mini",
+        "fallback_model": "lumicore-7-spark-preview",
+        "deprecated_default": "lumicore-5-core",
+        "revision_reference_text": """
+            lumicore-9-small is not registered locally.
+            Use lumicore-7-spark-preview as the sanctioned fallback for lumicore-9 small-class requests.
+            """,
+        "revision_notice_text": """
+            The requested lumicore-9 small-class model is not registered locally.
+            Older defaults such as lumicore-5-core are deprecated for this route.
+            Use the local docs to find the sanctioned fallback.
+            """,
+        "revision_example_text": """
+            Runnable local example:
+            payload = {"model": "approved-fallback-model"}
+            print(payload)
+            The payload must be a JSON object with a single model field.
+            Replace approved-fallback-model with the sanctioned local fallback from the docs.
+            """,
+        "localized_reference_text": """
+            lumicore-9-mini 未在本地注册。
+            对 lumicore-9 mini 类请求，批准的回退模型是 lumicore-7-spark-preview。
+            最终 JSON 字段必须写成 模型。
+            """,
+    },
+    {
+        "sequence_id": "v2-learning-registry-novalyth",
+        "scenario_prefix": "v2-learning-registry-novalyth",
+        "base_prefix": "v2_learning_registry_novalyth",
+        "doc_prefix": "registry-learning-novalyth",
+        "package_name": "Novalyth AI (fictional company founded in 2026)",
+        "localized_package_name": "Novalyth AI 中文注册表（虚构公司，成立于 2026 年）",
+        "request_small": "novalyth-6-small",
+        "request_lite": "novalyth-6-lite",
+        "request_mini": "novalyth-6-mini",
+        "fallback_model": "novalyth-5-scout-preview",
+        "deprecated_default": "novalyth-3.9-core",
+        "revision_reference_text": """
+            novalyth-6-small is not registered locally.
+            Use novalyth-5-scout-preview as the sanctioned fallback for novalyth-6 small-class requests.
+            """,
+        "revision_notice_text": """
+            The requested novalyth-6 small-class model is not registered locally.
+            Older defaults such as novalyth-3.9-core are deprecated for this route.
+            Use the local docs to find the sanctioned fallback.
+            """,
+        "revision_example_text": """
+            Runnable local example:
+            payload = {"model": "approved-fallback-model"}
+            print(payload)
+            The payload must be a JSON object with a single model field.
+            Replace approved-fallback-model with the sanctioned local fallback from the docs.
+            """,
+        "localized_reference_text": """
+            novalyth-6-mini 未在本地注册。
+            对 novalyth-6 mini 类请求，批准的回退模型是 novalyth-5-scout-preview。
+            最终 JSON 字段必须写成 模型。
+            """,
+    },
+)
 
 
 def _registry_learning_variant_a_sequence_worlds() -> tuple[Scenario, ...]:
@@ -1876,28 +2248,34 @@ def build_v2_stage_suite() -> tuple[Scenario, ...]:
 
 @lru_cache(maxsize=1)
 def build_v2_learning_sequences() -> tuple[ScenarioSequence, ...]:
-    openai_stages = _openai_learning_sequence_worlds()
-    pandas_stages = _pandas_learning_sequence_worlds()
-    registry_stages = _registry_learning_sequence_worlds()
     return (
-        ScenarioSequence(
-            id="v2-learning-openai-revision",
-            family=ScenarioFamily.API_MIGRATION,
-            stages=openai_stages,
-            benchmark_suite="v2_learning",
-        ),
-        ScenarioSequence(
-            id="v2-learning-pandas-revision",
-            family=ScenarioFamily.DSL_WRAPPER,
-            stages=pandas_stages,
-            benchmark_suite="v2_learning",
-        ),
-        ScenarioSequence(
-            id="v2-learning-registry-revision",
-            family=ScenarioFamily.FUTURE_REGISTRY,
-            stages=registry_stages,
-            benchmark_suite="v2_learning",
-        ),
+        tuple(
+            ScenarioSequence(
+                id=str(spec["sequence_id"]),
+                family=ScenarioFamily.API_MIGRATION,
+                stages=_openai_learning_sequence_worlds_from_spec(spec),
+                benchmark_suite="v2_learning",
+            )
+            for spec in _OPENAI_LEARNING_VARIANT_SPECS
+        )
+        + tuple(
+            ScenarioSequence(
+                id=str(spec["sequence_id"]),
+                family=ScenarioFamily.DSL_WRAPPER,
+                stages=_pandas_learning_sequence_worlds_from_spec(spec),
+                benchmark_suite="v2_learning",
+            )
+            for spec in _PANDAS_LEARNING_VARIANT_SPECS
+        )
+        + tuple(
+            ScenarioSequence(
+                id=str(spec["sequence_id"]),
+                family=ScenarioFamily.FUTURE_REGISTRY,
+                stages=_registry_learning_sequence_worlds_from_spec(spec),
+                benchmark_suite="v2_learning",
+            )
+            for spec in _REGISTRY_LEARNING_VARIANT_SPECS
+        )
     )
 
 

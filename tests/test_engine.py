@@ -34,8 +34,8 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(len(build_stress_suite()), 6)
         self.assertEqual(len(build_v2_sequences()), 3)
         self.assertEqual(len(build_v2_stage_suite()), 12)
-        self.assertEqual(len(build_v2_learning_sequences()), 3)
-        self.assertEqual(len(build_v2_learning_stage_suite()), 12)
+        self.assertEqual(len(build_v2_learning_sequences()), 9)
+        self.assertEqual(len(build_v2_learning_stage_suite()), 36)
         self.assertTrue(all(scenario.timeout_s == 600 for scenario in build_core_suite()))
         self.assertTrue(all(scenario.timeout_s == 600 for scenario in build_stress_suite()))
         for scenario in build_core_suite():
@@ -245,7 +245,22 @@ class EngineTests(unittest.TestCase):
     def test_v2_learning_sequences_have_probe_revision_transfer_generalization(self):
         sequences = build_v2_learning_sequences()
 
-        self.assertEqual(len(sequences), 3)
+        self.assertEqual(len(sequences), 9)
+        self.assertEqual(
+            {
+                ScenarioFamily.API_MIGRATION: 3,
+                ScenarioFamily.DSL_WRAPPER: 3,
+                ScenarioFamily.FUTURE_REGISTRY: 3,
+            },
+            {
+                family: sum(1 for sequence in sequences if sequence.family == family)
+                for family in (
+                    ScenarioFamily.API_MIGRATION,
+                    ScenarioFamily.DSL_WRAPPER,
+                    ScenarioFamily.FUTURE_REGISTRY,
+                )
+            },
+        )
         for sequence in sequences:
             self.assertEqual(sequence.benchmark_suite, "v2_learning")
             self.assertEqual(len(sequence.stages), 4)
@@ -255,7 +270,7 @@ class EngineTests(unittest.TestCase):
             self.assertEqual(sequence.stages[3].sequence_stage.value, "capstone")
 
     def test_v2_learning_variant_c_is_accessible_without_changing_default_suite(self):
-        self.assertEqual(len(build_v2_learning_sequences()), 3)
+        self.assertEqual(len(build_v2_learning_sequences()), 9)
         variant_sequences = build_v2_learning_variant_c_sequences()
         self.assertEqual(len(variant_sequences), 1)
         sequence = get_v2_learning_sequence("v2-learning-registry-revision-c")
@@ -346,9 +361,9 @@ class EngineTests(unittest.TestCase):
         pandas_sequence = get_v2_learning_sequence("v2-learning-pandas-revision")
         registry_sequence = get_v2_learning_sequence("v2-learning-registry-revision")
 
-        self.assertEqual(openai_sequence.stages[1].docs_index[2].doc_id, "openai-learning-content-example")
+        self.assertEqual(openai_sequence.stages[1].docs_index[2].doc_id, "openai-learning-example")
         self.assertIn("Runnable local example", openai_sequence.stages[1].docs_index[2].text)
-        self.assertEqual(pandas_sequence.stages[1].docs_index[2].doc_id, "pandas-learning-stack-example")
+        self.assertEqual(pandas_sequence.stages[1].docs_index[2].doc_id, "pandas-learning-example")
         self.assertIn("orders_a", pandas_sequence.stages[1].docs_index[2].text)
         self.assertEqual(registry_sequence.stages[1].docs_index[2].doc_id, "registry-learning-fallback-example")
         self.assertNotIn("glm-8-lite", registry_sequence.stages[1].docs_index[2].text)

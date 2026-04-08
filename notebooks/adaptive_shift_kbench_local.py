@@ -49,6 +49,9 @@ with patched_local_kaggle_benchmarks():
     )
     llm = LocalTaskLLM(_adapter_factory)
 
+    # This local smoke still exercises one sequence directly.
+    # The public Kaggle notebook uses the expanded overall task, which now
+    # aggregates 9 learning sequences through family subtasks.
     score = adaptive_shift_v2_learning_sequence.run(
         llm=llm,
         sequence_id="v2-learning-openai-revision",

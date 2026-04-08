@@ -291,8 +291,17 @@ def _build_env(mock_name: str) -> dict[str, object]:
 
     if mock_name == "openai_client_content":
         class CreateAPI:
-            def create(self, *, model: str, content: str):
-                return {"ok": True, "model": model, "content": content}
+            def create(self, *, model: str, content: str | None = None, payload: str | None = None):
+                if (content is None) == (payload is None):
+                    raise BenchmarkValidationError(
+                        "client.unified.responses.create requires exactly one of content= or payload="
+                    )
+                body = content if content is not None else payload
+                field_name = "content" if content is not None else "payload"
+                return {"ok": True, "model": model, field_name: body}
+
+            def submit(self, *, model: str, content: str):
+                return {"ok": True, "model": model, "content": content, "entrypoint": "submit"}
 
         class LegacyResponses:
             def create(self, *args, **kwargs):
@@ -313,12 +322,22 @@ def _build_env(mock_name: str) -> dict[str, object]:
 
     if mock_name == "openai_han":
         class 创建接口:
-            def 创建(self, *, 模型: str, 内容: str):
-                return {"ok": True, "模型": 模型, "内容": 内容}
+            def 创建(self, *, 模型: str, 内容: str | None = None, 载荷: str | None = None):
+                if (内容 is None) == (载荷 is None):
+                    raise BenchmarkValidationError(
+                        "client.统一.响应.创建 requires exactly one of 内容= or 载荷="
+                    )
+                body = 内容 if 内容 is not None else 载荷
+                field_name = "内容" if 内容 is not None else "载荷"
+                return {"ok": True, "模型": 模型, field_name: body}
+
+            def 提交(self, *, 模型: str, 内容: str):
+                return {"ok": True, "模型": 模型, "内容": 内容, "入口": "提交"}
 
         class 响应命名空间:
             def __init__(self):
                 self.创建 = 创建接口().创建
+                self.提交 = 创建接口().提交
 
         class 统一命名空间:
             def __init__(self):
@@ -366,24 +385,46 @@ def _build_env(mock_name: str) -> dict[str, object]:
 
         return {"pandas_cn": PandasCN(), "left": object(), "right": object()}
 
-    if mock_name == "pandas_cn_stack":
+    if mock_name in {"pandas_cn_stack", "pandas_cn_columns", "pandas_cn_order"}:
         class PandasCN:
             def stack_rows(self, frames, reset_index: bool = False):
                 return {"frame_count": len(frames), "reset_index": reset_index}
+
+            def pick_columns(self, frame, columns):
+                return {"frame": frame, "columns": list(columns)}
+
+            def order_rows(self, frame, *, key: str, descending: bool = False):
+                return {"frame": frame, "key": key, "descending": descending}
 
             def concat_rows(self, *args, **kwargs):
                 raise DeprecatedInterfaceError(
                     "pandas_cn.concat_rows was renamed; use pandas_cn.stack_rows(..., reset_index=True)"
                 )
 
-        return {"pandas_cn": PandasCN(), "left": object(), "right": object()}
+            def select_cols(self, *args, **kwargs):
+                raise DeprecatedInterfaceError(
+                    "pandas_cn.select_cols was renamed; use pandas_cn.pick_columns(..., columns=[...])"
+                )
 
-    if mock_name == "pandas_han":
+            def sort_rows(self, *args, **kwargs):
+                raise DeprecatedInterfaceError(
+                    "pandas_cn.sort_rows was renamed; use pandas_cn.order_rows(..., descending=True)"
+                )
+
+        return {"pandas_cn": PandasCN(), "left": object(), "right": object(), "sales": object()}
+
+    if mock_name in {"pandas_han", "pandas_han_columns", "pandas_han_order"}:
         class 中文表格层:
             def 合并行(self, frames, 忽略索引: bool = False):
                 return {"frame_count": len(frames), "忽略索引": 忽略索引}
 
-        return {"表格层": 中文表格层(), "left": object(), "right": object()}
+            def 取列(self, frame, *, 列):
+                return {"frame": frame, "列": list(列)}
+
+            def 排序行(self, frame, *, 键: str, 降序: bool = False):
+                return {"frame": frame, "键": 键, "降序": 降序}
+
+        return {"表格层": 中文表格层(), "left": object(), "right": object(), "sales": object()}
 
     if mock_name == "openai_zh":
         class CreateAPI:
