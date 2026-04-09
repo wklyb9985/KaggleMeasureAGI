@@ -32,6 +32,11 @@ from adaptive_shift_bench.scenarios import (
     get_v2_scenario,
     get_v2_sequence,
 )
+from adaptive_shift_bench.strict_dataset import (
+    build_v3_learning_strict_sequences,
+    get_v3_learning_strict_scenario,
+    get_v3_learning_strict_sequence,
+)
 
 _RUN_NAMESPACE = os.environ.get("ADAPTIVE_SHIFT_RUN_ID", f"run-{os.getpid()}-{uuid.uuid4().hex[:8]}")
 _PUBLIC_V2_LEARNING_OPENAI_SEQUENCE_IDS = (
@@ -67,6 +72,7 @@ adaptive_shift_v2_learning_registry_lumicore = None
 adaptive_shift_v2_learning_registry_novalyth = None
 adaptive_shift_v2_learning_registry = None
 adaptive_shift_v2_learning_overall = None
+_PUBLIC_V3_STRICT_TASKS: dict[str, tuple[Any, Any, Any]] = {}
 
 
 class KBenchAdapter:
@@ -188,6 +194,9 @@ def _episode_result_from_dict(data: dict[str, Any]) -> EpisodeResult:
         sequence_id=data.get("sequence_id"),
         sequence_stage=SequenceStage(sequence_stage) if sequence_stage else None,
         score_breakdown=dict(data.get("score_breakdown", {})),
+        latent_rule_id=data.get("latent_rule_id"),
+        surface_style=data.get("surface_style"),
+        difficulty_tier=data.get("difficulty_tier"),
     )
 
 
@@ -216,7 +225,12 @@ def _sequence_result_from_dict(data: dict[str, Any]) -> SequenceResult:
         transfer_after_revision=data.get("transfer_after_revision", 0.0),
         localized_generalization=data.get("localized_generalization", 0.0),
         learning_score=data.get("learning_score", 0.0),
+        sequence_score=data.get("sequence_score", 0.0),
+        prior_leakage_rate=data.get("prior_leakage_rate", 0.0),
         score_breakdown=dict(data.get("score_breakdown", {})),
+        latent_rule_id=data.get("latent_rule_id"),
+        surface_style=data.get("surface_style"),
+        difficulty_tier=data.get("difficulty_tier"),
     )
 
 
@@ -230,6 +244,50 @@ def _load_public_sequence_result(
     return _sequence_result_from_dict(json.loads(path.read_text(encoding="utf-8")))
 
 
+def _strict_public_sequence_report_path(
+    difficulty_tier: str,
+    sequence_id: str,
+    attempt_index: int,
+    *,
+    output_dir: str | Path | None = None,
+) -> Path:
+    base = _resolve_output_dir(output_dir) / "v3_learning_strict" / difficulty_tier
+    base.mkdir(parents=True, exist_ok=True)
+    return base / f"public-sequence-{sequence_id}-attempt-{attempt_index + 1}.json"
+
+
+def _write_public_strict_sequence_report(
+    result: SequenceResult,
+    *,
+    difficulty_tier: str,
+    output_dir: str | Path | None = None,
+) -> Path:
+    path = _strict_public_sequence_report_path(
+        difficulty_tier,
+        result.sequence_id,
+        result.attempt_index,
+        output_dir=output_dir,
+    )
+    path.write_text(json.dumps(asdict(result), indent=2, sort_keys=True, default=str), encoding="utf-8")
+    return path
+
+
+def _load_public_strict_sequence_result(
+    difficulty_tier: str,
+    sequence_id: str,
+    attempt_index: int,
+    *,
+    output_dir: str | Path | None = None,
+) -> SequenceResult:
+    path = _strict_public_sequence_report_path(
+        difficulty_tier,
+        sequence_id,
+        attempt_index,
+        output_dir=output_dir,
+    )
+    return _sequence_result_from_dict(json.loads(path.read_text(encoding="utf-8")))
+
+
 def _run_learning_sequence_result(
     llm: Any,
     sequence_id: str,
@@ -238,6 +296,23 @@ def _run_learning_sequence_result(
     import kaggle_benchmarks as kbench
 
     sequence = get_v2_learning_sequence(sequence_id)
+    with kbench.chats.new(f"{sequence.id}-attempt-{attempt_index + 1}", orphan=True):
+        return run_sequence(
+            KBenchAdapter(llm),
+            sequence,
+            attempt_index=attempt_index,
+            prompt_style="release_note",
+        )
+
+
+def _run_strict_sequence_result(
+    llm: Any,
+    sequence_id: str,
+    attempt_index: int,
+) -> SequenceResult:
+    import kaggle_benchmarks as kbench
+
+    sequence = get_v3_learning_strict_sequence(sequence_id)
     with kbench.chats.new(f"{sequence.id}-attempt-{attempt_index + 1}", orphan=True):
         return run_sequence(
             KBenchAdapter(llm),
@@ -463,6 +538,93 @@ def get_public_kbench_v2_learning_tasks():
         adaptive_shift_v2_learning_registry,
         adaptive_shift_v2_learning_overall,
     )
+
+
+def _strict_sequences_for(difficulty_tier: str, surface_style: str | None = None):
+    return build_v3_learning_strict_sequences(surface_style=surface_style, difficulty_tier=difficulty_tier)
+
+
+def _run_and_store_public_strict_sequence(
+    llm: Any,
+    difficulty_tier: str,
+    sequence_id: str,
+    attempt_index: int = 0,
+) -> float:
+    result = _run_strict_sequence_result(llm, sequence_id, attempt_index)
+    _write_public_strict_sequence_report(result, difficulty_tier=difficulty_tier)
+    return result.sequence_score
+
+
+def get_public_kbench_v3_learning_strict_tasks(difficulty_tier: str):
+    if difficulty_tier in _PUBLIC_V3_STRICT_TASKS:
+        return _PUBLIC_V3_STRICT_TASKS[difficulty_tier]
+
+    try:
+        import kaggle_benchmarks as kbench
+    except ImportError as exc:  # pragma: no cover
+        raise ImportError(
+            "kaggle_benchmarks is required to build Kaggle tasks. "
+            "Import this function inside a Kaggle notebook or an environment with kaggle_benchmarks installed."
+        ) from exc
+
+    if difficulty_tier not in {"standard", "hard"}:
+        raise ValueError(f"Unsupported strict difficulty tier: {difficulty_tier}")
+
+    surface_sequences = {
+        surface: tuple(sequence.id for sequence in _strict_sequences_for(difficulty_tier, surface))
+        for surface in ("abstract", "realistic")
+    }
+
+    @kbench.task(name=f"adaptive_shift_v3_learning_strict_{difficulty_tier}_abstract")
+    def strict_abstract(llm, attempt_index: int = 0) -> float:
+        results = []
+        for sequence_id in surface_sequences["abstract"]:
+            _run_and_store_public_strict_sequence(llm, difficulty_tier, sequence_id, attempt_index)
+            results.append(
+                _load_public_strict_sequence_result(difficulty_tier, sequence_id, attempt_index)
+            )
+        report = aggregate_sequence_results(results)
+        write_sequence_report_bundle(
+            report,
+            _resolve_output_dir() / "v3_learning_strict" / difficulty_tier / "abstract",
+        )
+        return float(report["metrics"]["sequence_score"])
+
+    @kbench.task(name=f"adaptive_shift_v3_learning_strict_{difficulty_tier}_realistic")
+    def strict_realistic(llm, attempt_index: int = 0) -> float:
+        results = []
+        for sequence_id in surface_sequences["realistic"]:
+            _run_and_store_public_strict_sequence(llm, difficulty_tier, sequence_id, attempt_index)
+            results.append(
+                _load_public_strict_sequence_result(difficulty_tier, sequence_id, attempt_index)
+            )
+        report = aggregate_sequence_results(results)
+        write_sequence_report_bundle(
+            report,
+            _resolve_output_dir() / "v3_learning_strict" / difficulty_tier / "realistic",
+        )
+        return float(report["metrics"]["sequence_score"])
+
+    @kbench.task(name=f"adaptive_shift_v3_learning_strict_{difficulty_tier}_overall")
+    def strict_overall(llm) -> float:
+        strict_abstract.run(llm=llm, attempt_index=0)
+        strict_realistic.run(llm=llm, attempt_index=0)
+        results = []
+        for surface in ("abstract", "realistic"):
+            for sequence_id in surface_sequences[surface]:
+                results.append(
+                    _load_public_strict_sequence_result(difficulty_tier, sequence_id, 0)
+                )
+        report = aggregate_sequence_results(results)
+        write_sequence_report_bundle(
+            report,
+            _resolve_output_dir() / "v3_learning_strict" / difficulty_tier,
+        )
+        return float(report["metrics"]["sequence_score"])
+
+    tasks = (strict_abstract, strict_realistic, strict_overall)
+    _PUBLIC_V3_STRICT_TASKS[difficulty_tier] = tasks
+    return tasks
 
 
 def build_kbench_tasks(output_dir: str | Path | None = None):
@@ -696,6 +858,84 @@ def build_kbench_v2_learning_tasks(output_dir: str | Path | None = None):
         adaptive_shift_v2_learning_attempt,
         adaptive_shift_v2_learning_sequence,
         adaptive_shift_v2_learning_overall,
+    )
+
+
+def build_kbench_v3_learning_strict_tasks(
+    output_dir: str | Path | None = None,
+    *,
+    difficulty_tier: str,
+):
+    try:
+        import kaggle_benchmarks as kbench
+    except ImportError as exc:  # pragma: no cover
+        raise ImportError(
+            "kaggle_benchmarks is required to build Kaggle tasks. "
+            "Import this function inside a Kaggle notebook or an environment with kaggle_benchmarks installed."
+        ) from exc
+    if difficulty_tier not in {"standard", "hard"}:
+        raise ValueError(f"Unsupported strict difficulty tier: {difficulty_tier}")
+
+    resolved_output_dir = _resolve_output_dir(output_dir) / "v3_learning_strict" / difficulty_tier
+
+    @kbench.task(name=f"adaptive_shift_v3_learning_strict_{difficulty_tier}_attempt_local")
+    def adaptive_shift_v3_learning_strict_attempt(llm, scenario_id: str, attempt_index: int = 0) -> float:
+        scenario = get_v3_learning_strict_scenario(scenario_id)
+        result = run_scenario(
+            KBenchAdapter(llm),
+            scenario,
+            attempt_index=attempt_index,
+            prompt_style="release_note",
+        )
+        _write_attempt_report(
+            asdict(result),
+            scenario_id,
+            attempt_index,
+            prefix=f"v3-strict-{difficulty_tier}-scenario",
+            output_dir=resolved_output_dir,
+        )
+        return result.score
+
+    @kbench.task(name=f"adaptive_shift_v3_learning_strict_{difficulty_tier}_sequence_local")
+    def adaptive_shift_v3_learning_strict_sequence(llm, sequence_id: str, attempt_index: int = 0) -> float:
+        sequence = get_v3_learning_strict_sequence(sequence_id)
+        with kbench.chats.new(f"{sequence.id}-attempt-{attempt_index + 1}", orphan=True):
+            result = run_sequence(
+                KBenchAdapter(llm),
+                sequence,
+                attempt_index=attempt_index,
+                prompt_style="release_note",
+            )
+        _write_attempt_report(
+            asdict(result),
+            sequence_id,
+            attempt_index,
+            prefix=f"v3-strict-{difficulty_tier}-sequence",
+            output_dir=resolved_output_dir,
+        )
+        return result.sequence_score
+
+    @kbench.task(name=f"adaptive_shift_v3_learning_strict_{difficulty_tier}_overall_local")
+    def adaptive_shift_v3_learning_strict_overall(llm) -> float:
+        results = []
+        for sequence in build_v3_learning_strict_sequences(difficulty_tier=difficulty_tier):
+            with kbench.chats.new(f"{sequence.id}-attempt-1", orphan=True):
+                results.append(
+                    run_sequence(
+                        KBenchAdapter(llm),
+                        sequence,
+                        attempt_index=0,
+                        prompt_style="release_note",
+                    )
+                )
+        report = aggregate_sequence_results(results)
+        write_sequence_report_bundle(report, resolved_output_dir)
+        return float(report["metrics"]["sequence_score"])
+
+    return (
+        adaptive_shift_v3_learning_strict_attempt,
+        adaptive_shift_v3_learning_strict_sequence,
+        adaptive_shift_v3_learning_strict_overall,
     )
 
 

@@ -26,6 +26,14 @@ from adaptive_shift_bench.scenarios import (
     get_v2_scenario,
     get_v2_sequence,
 )
+from adaptive_shift_bench.strict_dataset import build_v3_learning_strict_sequences, get_v3_learning_strict_sequence
+
+
+def _render_expected_call(expected: dict[str, object]) -> str:
+    args = ", ".join(repr(arg) for arg in expected.get("args", []))
+    kwargs = ", ".join(f"{key}={value!r}" for key, value in expected.get("kwargs", {}).items())
+    parts = [part for part in (args, kwargs) if part]
+    return f"{expected['path']}({', '.join(parts)})"
 
 
 class EngineTests(unittest.TestCase):
@@ -43,6 +51,70 @@ class EngineTests(unittest.TestCase):
                 self.assertEqual(scenario.max_turns, 15)
             else:
                 self.assertEqual(scenario.max_turns, 4)
+
+    def test_v3_learning_strict_suite_sizes_and_metadata(self):
+        standard_sequences = build_v3_learning_strict_sequences(difficulty_tier="standard")
+        hard_sequences = build_v3_learning_strict_sequences(difficulty_tier="hard")
+
+        self.assertEqual(len(standard_sequences), 48)
+        self.assertEqual(len(hard_sequences), 48)
+        self.assertEqual(sum(1 for sequence in standard_sequences if sequence.surface_style == "abstract"), 24)
+        self.assertEqual(sum(1 for sequence in standard_sequences if sequence.surface_style == "realistic"), 24)
+        self.assertTrue(all(sequence.benchmark_suite == "v3_learning_strict" for sequence in standard_sequences))
+        self.assertTrue(all(sequence.difficulty_tier == "hard" for sequence in hard_sequences))
+
+    def test_v3_learning_strict_sequence_scores_direct_post_learning_accuracy(self):
+        sequence = get_v3_learning_strict_sequence("v3-strict-standard-abstract-api-route-payload-s1")
+        adapt_doc_id = sequence.stages[1].docs_index[0].doc_id
+        cap_doc_id = sequence.stages[3].docs_index[0].doc_id
+        script = [
+            '{"action":"answer","content":"client.responses.create(model=\'wrong\', input_text=\'wrong\')"}',
+            '{"action":"search_docs","query":"current route current keyword"}',
+            f'{{"action":"read_doc","doc_id":"{adapt_doc_id}"}}',
+            f'{{"action":"answer","content":"{_render_expected_call(sequence.stages[1].validator_spec.payload["expected_call"])}"}}',
+            f'{{"action":"answer","content":"{_render_expected_call(sequence.stages[2].validator_spec.payload["expected_call"])}"}}',
+            '{"action":"search_docs","query":"alternate wrapper alternate surface"}',
+            f'{{"action":"read_doc","doc_id":"{cap_doc_id}"}}',
+            f'{{"action":"answer","content":"{_render_expected_call(sequence.stages[3].validator_spec.payload["expected_call"])}"}}',
+        ]
+
+        result = run_sequence(ScriptedLLMAdapter(script), sequence, attempt_index=0, prompt_style="release_note")
+
+        self.assertTrue(result.passed)
+        self.assertAlmostEqual(result.sequence_score, 1.0)
+        self.assertAlmostEqual(result.learning_score, 1.0)
+        self.assertAlmostEqual(result.prior_leakage_rate, 0.0)
+        self.assertEqual(result.score_breakdown["sequence_score"], 1.0)
+
+    def test_v3_learning_strict_logs_prior_leakage_without_reweighting_score(self):
+        sequence = get_v3_learning_strict_sequence("v3-strict-standard-abstract-api-route-payload-s1")
+        adapt_doc_id = sequence.stages[1].docs_index[0].doc_id
+        cap_doc_id = sequence.stages[3].docs_index[0].doc_id
+        script = [
+            f'{{"action":"answer","content":"{_render_expected_call(sequence.stages[0].validator_spec.payload["expected_call"])}"}}',
+            '{"action":"search_docs","query":"current route current keyword"}',
+            f'{{"action":"read_doc","doc_id":"{adapt_doc_id}"}}',
+            f'{{"action":"answer","content":"{_render_expected_call(sequence.stages[1].validator_spec.payload["expected_call"])}"}}',
+            f'{{"action":"answer","content":"{_render_expected_call(sequence.stages[2].validator_spec.payload["expected_call"])}"}}',
+            '{"action":"search_docs","query":"alternate wrapper alternate surface"}',
+            f'{{"action":"read_doc","doc_id":"{cap_doc_id}"}}',
+            f'{{"action":"answer","content":"{_render_expected_call(sequence.stages[3].validator_spec.payload["expected_call"])}"}}',
+        ]
+
+        result = run_sequence(ScriptedLLMAdapter(script), sequence, attempt_index=0, prompt_style="release_note")
+
+        self.assertTrue(result.passed)
+        self.assertAlmostEqual(result.sequence_score, 1.0)
+        self.assertAlmostEqual(result.prior_leakage_rate, 1.0)
+        self.assertIn("prior_leakage", result.stage_results[0].failure_tags)
+
+    def test_v3_learning_strict_hard_sequences_require_multiple_docs(self):
+        sequence = get_v3_learning_strict_sequence("v3-strict-hard-realistic-dsl-stack-rows-s1")
+
+        self.assertEqual(len(sequence.stages[1].validator_spec.must_use_doc_ids), 2)
+        self.assertEqual(len(sequence.stages[3].validator_spec.must_use_doc_ids), 2)
+        self.assertGreaterEqual(len(sequence.stages[1].docs_index), 4)
+        self.assertGreaterEqual(len(sequence.stages[3].docs_index), 4)
 
     def test_docs_search_episode_uses_required_doc_and_passes(self):
         scenario = get_scenario("api_migration-easy-docs_search")

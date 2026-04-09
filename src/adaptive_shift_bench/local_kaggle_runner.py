@@ -9,6 +9,7 @@ from adaptive_shift_bench.kaggle_tasks import (
     build_kbench_tasks,
     build_kbench_v2_learning_tasks,
     build_kbench_v2_tasks,
+    build_kbench_v3_learning_strict_tasks,
 )
 from adaptive_shift_bench.local_kaggle_mock import LocalTaskLLM, patched_local_kaggle_benchmarks, run_parallel
 
@@ -50,6 +51,18 @@ def _load_tasks(suite: str, output_dir: Path):
     if suite == "v2":
         attempt_task, sequence_task, overall_task = build_kbench_v2_tasks(output_dir=output_dir)
         return {"attempt": attempt_task, "sequence": sequence_task, "overall": overall_task}
+    if suite == "v3_learning_strict_standard":
+        attempt_task, sequence_task, overall_task = build_kbench_v3_learning_strict_tasks(
+            output_dir=output_dir,
+            difficulty_tier="standard",
+        )
+        return {"attempt": attempt_task, "sequence": sequence_task, "overall": overall_task}
+    if suite == "v3_learning_strict_hard":
+        attempt_task, sequence_task, overall_task = build_kbench_v3_learning_strict_tasks(
+            output_dir=output_dir,
+            difficulty_tier="hard",
+        )
+        return {"attempt": attempt_task, "sequence": sequence_task, "overall": overall_task}
     attempt_task, sequence_task, overall_task = build_kbench_v2_learning_tasks(output_dir=output_dir)
     return {"attempt": attempt_task, "sequence": sequence_task, "overall": overall_task}
 
@@ -57,7 +70,11 @@ def _load_tasks(suite: str, output_dir: Path):
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the Kaggle task wrappers locally via a kaggle_benchmarks shim.")
     parser.add_argument("--backend", required=True, choices=("claude", "codex"))
-    parser.add_argument("--suite", default="v2_learning", choices=("v1", "v2", "v2_learning"))
+    parser.add_argument(
+        "--suite",
+        default="v2_learning",
+        choices=("v1", "v2", "v2_learning", "v3_learning_strict_standard", "v3_learning_strict_hard"),
+    )
     parser.add_argument("--task", default="sequence", choices=("attempt", "sequence", "overall"))
     parser.add_argument("--model", required=True)
     parser.add_argument("--effort", default="medium")

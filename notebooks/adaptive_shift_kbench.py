@@ -6,7 +6,7 @@ import importlib
 import kaggle_benchmarks as kbench
 
 
-REPO_URL = "https://github.com/wklyb9985/KaggleMeasureAGI/archive/refs/heads/master.zip"
+REPO_URL = "https://github.com/wklyb9985/KaggleMeasureAGI/archive/28862a2b37a99ee40a79d9b75bf33d0206cd7be4.zip"
 try:
     import pip  # noqa: F401
 except ImportError:

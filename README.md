@@ -16,6 +16,9 @@ It is built to support:
 - Any older V2 report that does not include `benchmark_metadata.benchmark_version` should be treated as `obsolete_pre_fix_v2` and not compared directly with `2.1` results.
 - The canonical learning suite is now the expanded `v2_learning` variant `b_expanded`, emitted as benchmark version `2.4-learning-b-expanded`.
 - Older learning reports should not be compared directly with `2.4-learning-b-expanded`.
+- The new strict prior-proof learning suites are emitted as benchmark version `3.0-strict-prior-proof`.
+- `v3_learning_strict_standard` is the direct-score public strict suite.
+- `v3_learning_strict_hard` is the matched hard variant for score-shift analysis.
 
 ## Layout
 
@@ -70,3 +73,18 @@ PYTHONPATH=src python -m adaptive_shift_bench.local_kaggle_runner \
   --model gpt-5.4-mini \
   --sequence-id v2-learning-openai-revision
 ```
+
+For the new strict suites:
+
+```bash
+PYTHONPATH=src python -m adaptive_shift_bench.local_kaggle_runner \
+  --backend codex \
+  --suite v3_learning_strict_standard \
+  --task overall \
+  --model gpt-5.4-mini
+```
+
+The Kaggle notebook entrypoints for the public strict suites are:
+
+- `notebooks/adaptive_shift_strict_standard_kbench.py`
+- `notebooks/adaptive_shift_strict_hard_kbench.py`

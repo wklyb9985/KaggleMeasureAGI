@@ -53,6 +53,10 @@ def _sequence_result(
     transfer_after_revision: float = 0.0,
     localized_generalization: float = 0.0,
     learning_score: float = 0.0,
+    sequence_score: float = 0.0,
+    prior_leakage_rate: float = 0.0,
+    surface_style: str | None = None,
+    difficulty_tier: str | None = None,
 ) -> SequenceResult:
     return SequenceResult(
         sequence_id=sequence_id,
@@ -75,6 +79,10 @@ def _sequence_result(
         transfer_after_revision=transfer_after_revision,
         localized_generalization=localized_generalization,
         learning_score=learning_score,
+        sequence_score=sequence_score,
+        prior_leakage_rate=prior_leakage_rate,
+        surface_style=surface_style,
+        difficulty_tier=difficulty_tier,
     )
 
 
@@ -300,6 +308,99 @@ class ReportingTests(unittest.TestCase):
             markdown = Path(md_path).read_text(encoding="utf-8")
             self.assertIn("primary_leaderboard_metric: learning_score", markdown)
             self.assertIn("learning_score:", markdown)
+
+    def test_aggregate_strict_sequence_results_emits_surface_and_strict_metrics(self):
+        report = aggregate_sequence_results(
+            [
+                _sequence_result(
+                    "strict-a",
+                    ScenarioFamily.API_MIGRATION,
+                    0,
+                    True,
+                    1.0,
+                    semantic=0.75,
+                    adaptation=0.75,
+                    transfer=0.5,
+                    protocol=1.0,
+                    efficiency=0.9,
+                    benchmark_suite="v3_learning_strict",
+                    prior_probe=0.0,
+                    prior_leakage_rate=0.0,
+                    transfer_after_revision=1.0,
+                    localized_generalization=1.0,
+                    learning_score=1.0,
+                    sequence_score=1.0,
+                    surface_style="abstract",
+                    difficulty_tier="standard",
+                ),
+                _sequence_result(
+                    "strict-b",
+                    ScenarioFamily.DSL_WRAPPER,
+                    0,
+                    False,
+                    2.0 / 3.0,
+                    semantic=0.5,
+                    adaptation=0.5,
+                    transfer=0.0,
+                    protocol=0.9,
+                    efficiency=0.8,
+                    benchmark_suite="v3_learning_strict",
+                    prior_probe=1.0,
+                    prior_leakage_rate=1.0,
+                    transfer_after_revision=0.0,
+                    localized_generalization=1.0,
+                    learning_score=2.0 / 3.0,
+                    sequence_score=2.0 / 3.0,
+                    surface_style="realistic",
+                    difficulty_tier="standard",
+                ),
+            ]
+        )
+
+        self.assertEqual(report["benchmark_metadata"]["report_mode"], "v3_learning_strict_sequences")
+        self.assertEqual(report["benchmark_metadata"]["primary_leaderboard_metric"], "sequence_score")
+        self.assertEqual(report["benchmark_metadata"]["benchmark_version"], "3.0-strict-prior-proof")
+        self.assertEqual(report["benchmark_metadata"]["difficulty_tier"], "standard")
+        self.assertEqual(report["benchmark_metadata"]["surface_style"], "mixed")
+        self.assertAlmostEqual(report["metrics"]["sequence_score"], 5.0 / 6.0)
+        self.assertAlmostEqual(report["metrics"]["overall"], 5.0 / 6.0)
+        self.assertAlmostEqual(report["metrics"]["prior_leakage_rate"], 0.5)
+        self.assertIn("abstract", report["surface_style_breakdown"])
+        self.assertIn("realistic", report["surface_style_breakdown"])
+
+    def test_write_strict_sequence_report_bundle_uses_strict_filenames(self):
+        report = aggregate_sequence_results(
+            [
+                _sequence_result(
+                    "strict-a",
+                    ScenarioFamily.API_MIGRATION,
+                    0,
+                    True,
+                    1.0,
+                    semantic=0.75,
+                    adaptation=0.75,
+                    transfer=0.5,
+                    protocol=1.0,
+                    efficiency=0.9,
+                    benchmark_suite="v3_learning_strict",
+                    prior_probe=0.0,
+                    prior_leakage_rate=0.0,
+                    transfer_after_revision=1.0,
+                    localized_generalization=1.0,
+                    learning_score=1.0,
+                    sequence_score=1.0,
+                    surface_style="abstract",
+                    difficulty_tier="hard",
+                )
+            ]
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            json_path, md_path = write_sequence_report_bundle(report, temp_dir)
+            self.assertEqual(Path(json_path).name, "adaptive_shift_v3_learning_strict_report.json")
+            self.assertEqual(Path(md_path).name, "adaptive_shift_v3_learning_strict_report.md")
+            markdown = Path(md_path).read_text(encoding="utf-8")
+            self.assertIn("primary_leaderboard_metric: sequence_score", markdown)
+            self.assertIn("sequence_score:", markdown)
 
 
     def test_transfer_and_adaptation_scores_differ(self):

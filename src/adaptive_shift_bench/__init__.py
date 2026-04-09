@@ -1,9 +1,11 @@
 from adaptive_shift_bench.engine import run_scenario, run_sequence, run_sequence_suite, run_suite
 from adaptive_shift_bench.kaggle_tasks import (
     get_public_kbench_v2_learning_tasks,
+    get_public_kbench_v3_learning_strict_tasks,
     build_kbench_tasks,
     build_kbench_v2_learning_tasks,
     build_kbench_v2_tasks,
+    build_kbench_v3_learning_strict_tasks,
 )
 from adaptive_shift_bench.local_kaggle_mock import (
     LocalTaskLLM,
@@ -35,6 +37,12 @@ from adaptive_shift_bench.scenarios import (
     get_v2_scenario,
     get_v2_sequence,
 )
+from adaptive_shift_bench.strict_dataset import (
+    build_v3_learning_strict_sequences,
+    build_v3_learning_strict_stage_suite,
+    get_v3_learning_strict_scenario,
+    get_v3_learning_strict_sequence,
+)
 
 __all__ = [
     "DEFAULT_ATTEMPTS",
@@ -45,7 +53,9 @@ __all__ = [
     "build_kbench_tasks",
     "build_kbench_v2_learning_tasks",
     "build_kbench_v2_tasks",
+    "build_kbench_v3_learning_strict_tasks",
     "get_public_kbench_v2_learning_tasks",
+    "get_public_kbench_v3_learning_strict_tasks",
     "build_stress_suite",
     "build_v2_learning_variant_a_sequences",
     "build_v2_learning_variant_a_stage_suite",
@@ -60,6 +70,10 @@ __all__ = [
     "get_v2_learning_sequence",
     "get_v2_scenario",
     "get_v2_sequence",
+    "build_v3_learning_strict_sequences",
+    "build_v3_learning_strict_stage_suite",
+    "get_v3_learning_strict_scenario",
+    "get_v3_learning_strict_sequence",
     "install_local_kaggle_benchmarks",
     "patched_local_kaggle_benchmarks",
     "run_scenario",

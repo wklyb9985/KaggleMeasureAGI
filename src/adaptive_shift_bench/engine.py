@@ -5,6 +5,7 @@ import json
 import re
 import time
 from dataclasses import asdict, dataclass, replace
+from types import SimpleNamespace
 from typing import Any, Callable, Literal
 
 from adaptive_shift_bench.llm import LLMAdapter
@@ -137,9 +138,87 @@ class _RecordingProxy:
         return attr
 
 
-def _build_recording_env(mock_name: str) -> tuple[dict[str, object], _CallLog]:
+def _install_callable(root: object, dotted_path: str, func: Callable[..., Any]) -> None:
+    current = root
+    parts = dotted_path.split(".")
+    for part in parts[:-1]:
+        child = getattr(current, part, None)
+        if child is None:
+            child = SimpleNamespace()
+            setattr(current, part, child)
+        current = child
+    setattr(current, parts[-1], func)
+
+
+def _build_strict_python_env(mock_config: dict[str, Any] | None) -> dict[str, object]:
+    if not mock_config:
+        raise BenchmarkValidationError("strict_python mock requires mock_config")
+
+    def _make_callable(operation: dict[str, Any]) -> Callable[..., Any]:
+        behavior = operation.get("behavior", "return")
+        if behavior == "deprecated":
+            message = operation.get("message", "deprecated interface")
+
+            def _deprecated(*args: Any, **kwargs: Any) -> Any:
+                raise DeprecatedInterfaceError(message)
+
+            return _deprecated
+
+        if behavior == "error":
+            message = operation.get("message", "invalid interface")
+
+            def _error(*args: Any, **kwargs: Any) -> Any:
+                raise BenchmarkValidationError(message)
+
+            return _error
+
+        def _ok(*args: Any, **kwargs: Any) -> Any:
+            return {
+                "ok": True,
+                "args": list(args),
+                "kwargs": dict(kwargs),
+            }
+
+        return _ok
+
+    def _make_root(root_name: str) -> object:
+        root = SimpleNamespace()
+        for operation in mock_config.get("root_operations", {}).get(root_name, ()):
+            _install_callable(root, str(operation["path"]), _make_callable(operation))
+        return root
+
+    env: dict[str, object] = {}
+    for name in mock_config.get("scalars", ()):
+        env[str(name)] = str(name)
+
+    root_cache: dict[str, object] = {}
+    for root_name in mock_config.get("root_operations", {}):
+        root_cache[root_name] = _make_root(root_name)
+        env[root_name] = root_cache[root_name]
+
+    for class_name, root_name in mock_config.get("exported_classes", {}).items():
+        operations = tuple(mock_config.get("root_operations", {}).get(root_name, ()))
+
+        class _Factory:
+            def __new__(cls, *args: Any, **kwargs: Any) -> object:
+                del cls, args, kwargs
+                root = SimpleNamespace()
+                for operation in operations:
+                    _install_callable(root, str(operation["path"]), _make_callable(operation))
+                return root
+
+        _Factory.__name__ = str(class_name)
+        env[str(class_name)] = _Factory
+
+    return env
+
+
+def _build_recording_env(
+    mock_name: str,
+    mock_config: dict[str, Any] | None = None,
+) -> tuple[dict[str, object], _CallLog]:
     log = _CallLog()
-    env = _build_env(mock_name)
+    env = _build_env(mock_name, mock_config)
     wrapped: dict[str, object] = {}
     for var_name, obj in env.items():
         if callable(obj) and isinstance(obj, type):
@@ -266,7 +345,10 @@ def _score_documents(query: str, scenario: Scenario) -> list[tuple[int, str, str
     return scored[:3]
 
 
-def _build_env(mock_name: str) -> dict[str, object]:
+def _build_env(mock_name: str, mock_config: dict[str, Any] | None = None) -> dict[str, object]:
+    if mock_name == "strict_python":
+        return _build_strict_python_env(mock_config)
+
     if mock_name == "openai_client":
         class CreateAPI:
             def create(self, *, model: str, input: str):
@@ -383,7 +465,7 @@ def _build_env(mock_name: str) -> dict[str, object]:
             def concat_rows(self, frames, ignore_index: bool = False):
                 return {"frame_count": len(frames), "ignore_index": ignore_index}
 
-        return {"pandas_cn": PandasCN(), "left": object(), "right": object()}
+        return {"pandas_cn": PandasCN(), "left": "left", "right": "right"}
 
     if mock_name in {"pandas_cn_stack", "pandas_cn_columns", "pandas_cn_order"}:
         class PandasCN:
@@ -411,7 +493,7 @@ def _build_env(mock_name: str) -> dict[str, object]:
                     "pandas_cn.sort_rows was renamed; use pandas_cn.order_rows(..., descending=True)"
                 )
 
-        return {"pandas_cn": PandasCN(), "left": object(), "right": object(), "sales": object()}
+        return {"pandas_cn": PandasCN(), "left": "left", "right": "right", "sales": "sales"}
 
     if mock_name in {"pandas_han", "pandas_han_columns", "pandas_han_order"}:
         class 中文表格层:
@@ -424,7 +506,7 @@ def _build_env(mock_name: str) -> dict[str, object]:
             def 排序行(self, frame, *, 键: str, 降序: bool = False):
                 return {"frame": frame, "键": 键, "降序": 降序}
 
-        return {"表格层": 中文表格层(), "left": object(), "right": object(), "sales": object()}
+        return {"表格层": 中文表格层(), "left": "left", "right": "right", "sales": "sales"}
 
     if mock_name == "openai_zh":
         class CreateAPI:
@@ -460,9 +542,13 @@ def _build_env(mock_name: str) -> dict[str, object]:
     raise BenchmarkValidationError(f"Unknown mock environment: {mock_name}")
 
 
-def _execute_python(candidate: str, mock_name: str) -> tuple[bool, str, _CallLog]:
+def _execute_python(
+    candidate: str,
+    mock_name: str,
+    mock_config: dict[str, Any] | None = None,
+) -> tuple[bool, str, _CallLog]:
     payload = _extract_candidate(candidate)
-    env, log = _build_recording_env(mock_name)
+    env, log = _build_recording_env(mock_name, mock_config)
     safe_builtins = _build_safe_builtins(env)
     try:
         compiled = compile(payload, "<candidate>", "eval")
@@ -479,8 +565,23 @@ def _execute_python(candidate: str, mock_name: str) -> tuple[bool, str, _CallLog
 
 
 def _recorded_call_matches(call: RecordedCall, expected: dict[str, Any]) -> bool:
+    def _value_matches(actual: Any, expected_value: Any) -> bool:
+        if isinstance(expected_value, str) and expected_value.startswith("$name:"):
+            return actual == expected_value.split(":", 1)[1]
+        if isinstance(expected_value, list):
+            if not isinstance(actual, (list, tuple)) or len(actual) != len(expected_value):
+                return False
+            return all(_value_matches(actual_item, expected_item) for actual_item, expected_item in zip(actual, expected_value))
+        return actual == expected_value
+
     if call.path != expected.get("path"):
         return False
+    expected_args = expected.get("args")
+    if expected_args is not None:
+        if len(expected_args) != len(call.args):
+            return False
+        if not all(_value_matches(actual, expected_value) for actual, expected_value in zip(call.args, expected_args)):
+            return False
     expected_kwargs = expected.get("kwargs")
     if expected_kwargs is not None:
         for key, value in expected_kwargs.items():
@@ -552,7 +653,11 @@ def _validate_candidate(
     selected_entities: list[str] = []
 
     if spec.kind is ValidatorKind.PYTHON_MOCK:
-        valid_runtime, feedback, call_log = _execute_python(candidate_text, spec.payload["mock"])
+        valid_runtime, feedback, call_log = _execute_python(
+            candidate_text,
+            spec.payload["mock"],
+            spec.payload.get("mock_config"),
+        )
         if not valid_runtime:
             # Even on runtime error, check if expected call was attempted (for semantic credit)
             expected_call = spec.payload.get("expected_call")
@@ -1097,6 +1202,9 @@ def run_scenario(
         sequence_id=scenario.sequence_id,
         sequence_stage=scenario.sequence_stage,
         score_breakdown=score_breakdown,
+        latent_rule_id=scenario.latent_rule_id,
+        surface_style=scenario.surface_style,
+        difficulty_tier=scenario.difficulty_tier,
     )
 
 
@@ -1147,6 +1255,8 @@ def run_sequence(
     transfer_after_revision = 0.0
     localized_generalization = 0.0
     learning_score = 0.0
+    sequence_score = 0.0
+    prior_leakage_rate = 0.0
 
     if benchmark_suite == "v2_learning" and len(stage_results) >= 4:
         prior = stage_results[0]
@@ -1200,6 +1310,34 @@ def run_sequence(
             + V2_LEARNING_SCORE_WEIGHTS["transfer_after_revision"] * transfer_after_revision
             + V2_LEARNING_SCORE_WEIGHTS["localized_generalization"] * localized_generalization
         )
+    elif benchmark_suite == "v3_learning_strict" and len(stage_results) >= 4:
+        prior = stage_results[0]
+        adapt = stage_results[1]
+        transfer = stage_results[2]
+        capstone = stage_results[3]
+
+        if prior.semantic_correctness >= 1.0:
+            prior = _add_failure_tag(prior, "prior_leakage")
+
+        normalized_results: list[EpisodeResult] = []
+        for result in (prior, adapt, transfer, capstone, *stage_results[4:]):
+            if result.semantic_correctness >= 1.0 and (
+                not result.adaptation_correctness or result.protocol_compliance <= 0.0
+            ):
+                result = _add_failure_tag(result, "format_only_failure")
+            normalized_results.append(result)
+        stage_results = normalized_results
+
+        prior_probe_correctness = stage_results[0].semantic_correctness
+        prior_leakage_rate = float(prior_probe_correctness >= 1.0)
+        transfer_after_revision = float(stage_results[2].passed)
+        localized_generalization = float(stage_results[3].passed)
+        sequence_score = (
+            float(stage_results[1].passed)
+            + float(stage_results[2].passed)
+            + float(stage_results[3].passed)
+        ) / 3.0
+        learning_score = sequence_score
 
     in_task_adaptation = sum(float(result.adaptation_correctness) for result in stage_results) / max(1, len(stage_results))
     cross_task_transfer = sum(transfer_scores) / max(1, len(transfer_scores)) if transfer_scores else 0.0
@@ -1209,6 +1347,9 @@ def run_sequence(
     if benchmark_suite == "v2_learning":
         overall_score = learning_score
         passed = revision_success == 1.0 and transfer_after_revision == 1.0 and localized_generalization == 1.0
+    elif benchmark_suite == "v3_learning_strict":
+        overall_score = sequence_score
+        passed = sequence_score >= 1.0
     else:
         overall_score = (
             0.35 * semantic_correctness
@@ -1238,6 +1379,17 @@ def run_sequence(
                 "learning_score": learning_score,
             }
         )
+    elif benchmark_suite == "v3_learning_strict":
+        score_breakdown.update(
+            {
+                "prior_probe_correctness": prior_probe_correctness,
+                "prior_leakage_rate": prior_leakage_rate,
+                "transfer_after_revision": transfer_after_revision,
+                "localized_generalization": localized_generalization,
+                "sequence_score": sequence_score,
+                "learning_score": learning_score,
+            }
+        )
     return SequenceResult(
         sequence_id=sequence.id,
         family=sequence.family,
@@ -1260,7 +1412,12 @@ def run_sequence(
         transfer_after_revision=transfer_after_revision,
         localized_generalization=localized_generalization,
         learning_score=learning_score,
+        sequence_score=sequence_score,
+        prior_leakage_rate=prior_leakage_rate,
         score_breakdown=score_breakdown,
+        latent_rule_id=sequence.latent_rule_id,
+        surface_style=sequence.surface_style,
+        difficulty_tier=sequence.difficulty_tier,
     )
 
 

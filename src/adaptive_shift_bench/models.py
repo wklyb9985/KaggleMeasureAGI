@@ -85,6 +85,9 @@ class Scenario:
     teaches_rules: tuple[str, ...] = ()
     depends_on_rules: tuple[str, ...] = ()
     ideal_turns: int | None = None
+    latent_rule_id: str | None = None
+    surface_style: str | None = None
+    difficulty_tier: str | None = None
 
 
 @dataclass(frozen=True)
@@ -131,6 +134,9 @@ class EpisodeResult:
     sequence_id: str | None = None
     sequence_stage: SequenceStage | None = None
     score_breakdown: dict[str, float] = field(default_factory=dict)
+    latent_rule_id: str | None = None
+    surface_style: str | None = None
+    difficulty_tier: str | None = None
 
 
 @dataclass(frozen=True)
@@ -139,6 +145,9 @@ class ScenarioSequence:
     family: ScenarioFamily
     stages: tuple[Scenario, ...]
     benchmark_suite: str = "v2"
+    latent_rule_id: str | None = None
+    surface_style: str | None = None
+    difficulty_tier: str | None = None
 
 
 @dataclass(frozen=True)
@@ -164,4 +173,9 @@ class SequenceResult:
     transfer_after_revision: float = 0.0
     localized_generalization: float = 0.0
     learning_score: float = 0.0
+    sequence_score: float = 0.0
+    prior_leakage_rate: float = 0.0
     score_breakdown: dict[str, float] = field(default_factory=dict)
+    latent_rule_id: str | None = None
+    surface_style: str | None = None
+    difficulty_tier: str | None = None

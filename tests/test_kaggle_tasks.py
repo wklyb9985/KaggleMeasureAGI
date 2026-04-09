@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import importlib
 import inspect
+import json
 import os
 import textwrap
 import tempfile
@@ -14,11 +15,49 @@ from adaptive_shift_bench.kaggle_tasks import (
     build_kbench_tasks,
     build_kbench_v2_learning_tasks,
     build_kbench_v2_tasks,
+    build_kbench_v3_learning_strict_tasks,
     _report_attempt_path,
     _resolve_output_dir,
 )
 from adaptive_shift_bench.llm import ScriptedLLMAdapter
 from adaptive_shift_bench.local_kaggle_mock import LocalTaskLLM, patched_local_kaggle_benchmarks, run_parallel
+from adaptive_shift_bench.strict_dataset import get_v3_learning_strict_sequence
+
+
+def _render_expected_call(expected: dict[str, object]) -> str:
+    args = ", ".join(repr(arg) for arg in expected.get("args", []))
+    kwargs = ", ".join(f"{key}={value!r}" for key, value in expected.get("kwargs", {}).items())
+    parts = [part for part in (args, kwargs) if part]
+    return f"{expected['path']}({', '.join(parts)})"
+
+
+def _strict_stage_answer(stage) -> str:
+    payload = stage.validator_spec.payload
+    if "expected_call" in payload:
+        return _render_expected_call(payload["expected_call"])
+    field = payload["schema_fields"][0]
+    return json.dumps({field: payload["expected_model"]})
+
+
+def _strict_sequence_script(sequence) -> list[str]:
+    adapt_stage = sequence.stages[1]
+    capstone_stage = sequence.stages[3]
+    return [
+        '{"action":"answer","content":"{\\"model\\": \\"wrong-prior\\"}"}',
+        f'{{"action":"search_docs","query":"{adapt_stage.docs_index[0].title}"}}',
+        *[
+            f'{{"action":"read_doc","doc_id":"{doc_id}"}}'
+            for doc_id in adapt_stage.validator_spec.must_use_doc_ids
+        ],
+        f'{{"action":"answer","content":"{_strict_stage_answer(adapt_stage)}"}}',
+        f'{{"action":"answer","content":"{_strict_stage_answer(sequence.stages[2])}"}}',
+        f'{{"action":"search_docs","query":"{capstone_stage.docs_index[0].title}"}}',
+        *[
+            f'{{"action":"read_doc","doc_id":"{doc_id}"}}'
+            for doc_id in capstone_stage.validator_spec.must_use_doc_ids
+        ],
+        f'{{"action":"answer","content":"{_strict_stage_answer(capstone_stage)}"}}',
+    ]
 
 
 class KaggleTaskTests(unittest.TestCase):
@@ -53,6 +92,10 @@ class KaggleTaskTests(unittest.TestCase):
     def test_build_kbench_v2_learning_tasks_requires_kaggle_benchmarks(self):
         with self.assertRaises(ImportError):
             build_kbench_v2_learning_tasks()
+
+    def test_build_kbench_v3_learning_strict_tasks_requires_kaggle_benchmarks(self):
+        with self.assertRaises(ImportError):
+            build_kbench_v3_learning_strict_tasks(difficulty_tier="standard")
 
     def test_v2_sequence_report_includes_learned_rules(self):
         """V2 sequence report JSON must contain learned_rules and stage_results."""
@@ -128,6 +171,30 @@ class KaggleTaskTests(unittest.TestCase):
 
         self.assertEqual(score, 1.0)
         self.assertEqual(len(adapters), 1)
+
+    def test_local_kaggle_mock_runs_strict_sequence_task(self):
+        sequence = get_v3_learning_strict_sequence("v3-strict-standard-abstract-api-route-payload-s1")
+        adapters = {}
+
+        def factory(session_key: str):
+            sequence_id = session_key.removeprefix("chat:").rsplit("-attempt-", 1)[0]
+            adapter = ScriptedLLMAdapter(_strict_sequence_script(get_v3_learning_strict_sequence(sequence_id)))
+            adapters[session_key] = adapter
+            return adapter
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patched_local_kaggle_benchmarks():
+                _, sequence_task, overall_task = build_kbench_v3_learning_strict_tasks(
+                    output_dir=temp_dir,
+                    difficulty_tier="standard",
+                )
+                llm = LocalTaskLLM(factory)
+                sequence_score = sequence_task.run(llm=llm, sequence_id=sequence.id, attempt_index=0)
+                overall_score = overall_task.run(llm=llm)
+
+        self.assertAlmostEqual(sequence_score, 1.0)
+        self.assertGreater(overall_score, 0.5)
+        self.assertTrue(adapters)
         adapter = next(iter(adapters.values()))
         self.assertGreater(len(adapter.seen_prompts), 1)
 

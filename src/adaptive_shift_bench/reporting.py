@@ -21,11 +21,17 @@ V2_BENCHMARK_VERSION = "2.1"
 V2_COMPARABILITY = "not-comparable-to-pre-fix-v2"
 V2_LEARNING_BENCHMARK_VERSION = "2.4-learning-b-expanded"
 V2_LEARNING_COMPARABILITY = "not-comparable-to-prior-v2.3-learning-b-or-earlier-learning-variants"
+V3_STRICT_BENCHMARK_VERSION = "3.0-strict-prior-proof"
+V3_STRICT_COMPARABILITY = "new-prior-proof-learning-suite"
 V2_LEARNING_SCORE_WEIGHTS = {
     "revision_success": 0.55,
     "transfer_after_revision": 0.30,
     "localized_generalization": 0.15,
 }
+
+
+def _is_v3_strict_suite(benchmark_suite: str) -> bool:
+    return benchmark_suite == "v3_learning_strict"
 
 
 def _group_by_scenario(results: Iterable[EpisodeResult]) -> dict[str, list[EpisodeResult]]:
@@ -82,6 +88,8 @@ def _compute_sequence_metrics(grouped: dict[str, list[SequenceResult]]) -> dict[
     pass_at_5 = sum(1.0 for runs in grouped.values() if any(run.passed for run in runs[:5])) / len(grouped)
     if benchmark_suite == "v2_learning":
         avg5 = sum(sum(run.learning_score for run in runs[:5]) / max(1, len(runs[:5])) for runs in grouped.values()) / len(grouped)
+    elif _is_v3_strict_suite(benchmark_suite):
+        avg5 = sum(sum(run.sequence_score for run in runs[:5]) / max(1, len(runs[:5])) for runs in grouped.values()) / len(grouped)
     else:
         avg5 = sum(sum(run.overall_score for run in runs[:5]) / max(1, len(runs[:5])) for runs in grouped.values()) / len(grouped)
     semantic_correctness = sum(result.semantic_correctness for result in first_runs) / len(first_runs)
@@ -115,6 +123,19 @@ def _compute_sequence_metrics(grouped: dict[str, list[SequenceResult]]) -> dict[
             }
         )
         metrics["overall"] = learning_score
+    elif _is_v3_strict_suite(benchmark_suite):
+        sequence_score = sum(result.sequence_score for result in first_runs) / len(first_runs)
+        metrics.update(
+            {
+                "prior_probe_correctness": sum(result.prior_probe_correctness for result in first_runs) / len(first_runs),
+                "prior_leakage_rate": sum(result.prior_leakage_rate for result in first_runs) / len(first_runs),
+                "transfer_after_revision": sum(result.transfer_after_revision for result in first_runs) / len(first_runs),
+                "localized_generalization": sum(result.localized_generalization for result in first_runs) / len(first_runs),
+                "sequence_score": sequence_score,
+                "learning_score": sequence_score,
+            }
+        )
+        metrics["overall"] = sequence_score
     else:
         metrics["overall"] = (
             V2_OVERALL_WEIGHTS["semantic_correctness"] * semantic_correctness
@@ -213,6 +234,7 @@ def aggregate_attempts(results: Iterable[EpisodeResult]) -> dict[str, object]:
 def aggregate_sequence_results(results: Iterable[SequenceResult]) -> dict[str, object]:
     grouped = _group_by_sequence(results)
     metrics = _compute_sequence_metrics(grouped)
+    first_runs = [runs[0] for runs in grouped.values() if runs]
     first_result = next(iter(next(iter(grouped.values()))), None) if grouped else None
     benchmark_suite = first_result.benchmark_suite if first_result is not None else "v2"
 
@@ -230,6 +252,8 @@ def aggregate_sequence_results(results: Iterable[SequenceResult]) -> dict[str, o
                     (
                         run.learning_score
                         if (runs and runs[0].benchmark_suite == "v2_learning")
+                        else run.sequence_score
+                        if (runs and _is_v3_strict_suite(runs[0].benchmark_suite))
                         else run.overall_score
                     )
                     for run in runs[:5]
@@ -243,6 +267,16 @@ def aggregate_sequence_results(results: Iterable[SequenceResult]) -> dict[str, o
     family_breakdown: dict[str, dict[str, float]] = {}
     for family, family_results in family_grouped.items():
         family_breakdown[family] = _compute_sequence_metrics(_group_by_sequence(family_results))
+
+    surface_grouped: dict[str, list[SequenceResult]] = defaultdict(list)
+    for runs in grouped.values():
+        if not runs:
+            continue
+        surface_grouped[runs[0].surface_style or "unspecified"].extend(runs)
+    surface_style_breakdown = {
+        surface: _compute_sequence_metrics(_group_by_sequence(results))
+        for surface, results in surface_grouped.items()
+    }
 
     ci_keys = [
         "pass_at_1",
@@ -268,7 +302,32 @@ def aggregate_sequence_results(results: Iterable[SequenceResult]) -> dict[str, o
                 "learning_score",
             ]
         )
+    elif _is_v3_strict_suite(benchmark_suite):
+        ci_keys.extend(
+            [
+                "prior_probe_correctness",
+                "prior_leakage_rate",
+                "transfer_after_revision",
+                "localized_generalization",
+                "sequence_score",
+                "learning_score",
+            ]
+        )
     confidence_intervals = {key: _bootstrap_sequence_ci(grouped, key) for key in ci_keys}
+
+    difficulty_tiers = {result.difficulty_tier for result in first_runs} if first_runs else set()
+    surface_styles = {result.surface_style for result in first_runs} if first_runs else set()
+    surface_delta = None
+    if "abstract" in surface_style_breakdown and "realistic" in surface_style_breakdown:
+        abstract_score = surface_style_breakdown["abstract"].get(
+            "sequence_score" if _is_v3_strict_suite(benchmark_suite) else "overall",
+            0.0,
+        )
+        realistic_score = surface_style_breakdown["realistic"].get(
+            "sequence_score" if _is_v3_strict_suite(benchmark_suite) else "overall",
+            0.0,
+        )
+        surface_delta = realistic_score - abstract_score
 
     return {
         "metrics": metrics,
@@ -277,25 +336,62 @@ def aggregate_sequence_results(results: Iterable[SequenceResult]) -> dict[str, o
             "benchmark_version": (
                 V2_LEARNING_BENCHMARK_VERSION
                 if benchmark_suite == "v2_learning"
+                else V3_STRICT_BENCHMARK_VERSION
+                if _is_v3_strict_suite(benchmark_suite)
                 else V2_BENCHMARK_VERSION
             ),
             "comparability": (
                 V2_LEARNING_COMPARABILITY
                 if benchmark_suite == "v2_learning"
+                else V3_STRICT_COMPARABILITY
+                if _is_v3_strict_suite(benchmark_suite)
                 else V2_COMPARABILITY
             ),
             "feedback_only_policy": FEEDBACK_ONLY_POLICY,
-            "report_mode": "v2_learning_sequences" if benchmark_suite == "v2_learning" else "v2_sequences",
-            "learning_variant": "b_expanded" if benchmark_suite == "v2_learning" else None,
-            "overall_weights": (
-                dict(V2_LEARNING_SCORE_WEIGHTS) if benchmark_suite == "v2_learning" else dict(V2_OVERALL_WEIGHTS)
+            "report_mode": (
+                "v2_learning_sequences"
+                if benchmark_suite == "v2_learning"
+                else "v3_learning_strict_sequences"
+                if _is_v3_strict_suite(benchmark_suite)
+                else "v2_sequences"
             ),
-            "primary_leaderboard_metric": "learning_score" if benchmark_suite == "v2_learning" else "overall",
-            "learning_score_weights": dict(V2_LEARNING_SCORE_WEIGHTS) if benchmark_suite == "v2_learning" else {},
+            "learning_variant": (
+                "b_expanded"
+                if benchmark_suite == "v2_learning"
+                else "strict_prior_proof"
+                if _is_v3_strict_suite(benchmark_suite)
+                else None
+            ),
+            "overall_weights": (
+                dict(V2_LEARNING_SCORE_WEIGHTS)
+                if benchmark_suite == "v2_learning"
+                else {"adapt": 1 / 3, "transfer": 1 / 3, "capstone": 1 / 3}
+                if _is_v3_strict_suite(benchmark_suite)
+                else dict(V2_OVERALL_WEIGHTS)
+            ),
+            "primary_leaderboard_metric": (
+                "learning_score"
+                if benchmark_suite == "v2_learning"
+                else "sequence_score"
+                if _is_v3_strict_suite(benchmark_suite)
+                else "overall"
+            ),
+            "learning_score_weights": (
+                dict(V2_LEARNING_SCORE_WEIGHTS)
+                if benchmark_suite == "v2_learning"
+                else {"adapt": 1 / 3, "transfer": 1 / 3, "capstone": 1 / 3}
+                if _is_v3_strict_suite(benchmark_suite)
+                else {}
+            ),
+            "dataset_version": V3_STRICT_BENCHMARK_VERSION if _is_v3_strict_suite(benchmark_suite) else None,
+            "difficulty_tier": next(iter(difficulty_tiers)) if len(difficulty_tiers) == 1 else "mixed",
+            "surface_style": next(iter(surface_styles)) if len(surface_styles) == 1 else "mixed",
         },
         "confidence_intervals": confidence_intervals,
         "family_breakdown": family_breakdown,
         "sequence_breakdown": sequence_breakdown,
+        "surface_style_breakdown": surface_style_breakdown,
+        "surface_style_delta": surface_delta,
     }
 
 
@@ -342,6 +438,10 @@ def write_sequence_report_bundle(report: dict[str, object], output_dir: str | Pa
         json_path = output_path / "adaptive_shift_v2_learning_report.json"
         md_path = output_path / "adaptive_shift_v2_learning_report.md"
         title = "# Adaptive Shift V2 Learning Report"
+    elif report_mode == "v3_learning_strict_sequences":
+        json_path = output_path / "adaptive_shift_v3_learning_strict_report.json"
+        md_path = output_path / "adaptive_shift_v3_learning_strict_report.md"
+        title = "# Adaptive Shift V3 Strict Learning Report"
     else:
         json_path = output_path / "adaptive_shift_v2_report.json"
         md_path = output_path / "adaptive_shift_v2_report.md"
@@ -384,6 +484,18 @@ def write_sequence_report_bundle(report: dict[str, object], output_dir: str | Pa
                 f"- learning_score: {metrics['learning_score']:.3f} ({ci['learning_score'][0]:.3f}, {ci['learning_score'][1]:.3f})",
             ]
         )
+    elif report_mode == "v3_learning_strict_sequences":
+        lines.extend(
+            [
+                f"- difficulty_tier: {benchmark_metadata.get('difficulty_tier', 'mixed')}",
+                f"- surface_style: {benchmark_metadata.get('surface_style', 'mixed')}",
+                f"- prior_probe_correctness: {metrics['prior_probe_correctness']:.3f} ({ci['prior_probe_correctness'][0]:.3f}, {ci['prior_probe_correctness'][1]:.3f})",
+                f"- prior_leakage_rate: {metrics['prior_leakage_rate']:.3f} ({ci['prior_leakage_rate'][0]:.3f}, {ci['prior_leakage_rate'][1]:.3f})",
+                f"- transfer_after_revision: {metrics['transfer_after_revision']:.3f} ({ci['transfer_after_revision'][0]:.3f}, {ci['transfer_after_revision'][1]:.3f})",
+                f"- localized_generalization: {metrics['localized_generalization']:.3f} ({ci['localized_generalization'][0]:.3f}, {ci['localized_generalization'][1]:.3f})",
+                f"- sequence_score: {metrics['sequence_score']:.3f} ({ci['sequence_score'][0]:.3f}, {ci['sequence_score'][1]:.3f})",
+            ]
+        )
     lines.extend(
         [
             "",
@@ -394,12 +506,29 @@ def write_sequence_report_bundle(report: dict[str, object], output_dir: str | Pa
                     f"- {family}: learning_score={values['learning_score']:.3f}, revision={values['revision_success']:.3f}, "
                     f"transfer_after_revision={values['transfer_after_revision']:.3f}, overall={values['overall']:.3f}"
                     if report_mode == "v2_learning_sequences"
+                    else f"- {family}: sequence_score={values['sequence_score']:.3f}, prior_leakage={values['prior_leakage_rate']:.3f}, overall={values['overall']:.3f}"
+                    if report_mode == "v3_learning_strict_sequences"
                     else f"- {family}: semantic={values['semantic_correctness']:.3f}, transfer={values['cross_task_transfer']:.3f}, protocol={values['protocol_compliance']:.3f}, overall={values['overall']:.3f}"
                 )
                 for family, values in sorted(report["family_breakdown"].items())
             ],
         ]
     )
+    if report_mode == "v3_learning_strict_sequences" and report.get("surface_style_breakdown"):
+        lines.extend(
+            [
+                "",
+                "## Surfaces",
+                "",
+                *[
+                    f"- {surface}: sequence_score={values['sequence_score']:.3f}, prior_leakage={values['prior_leakage_rate']:.3f}, overall={values['overall']:.3f}"
+                    for surface, values in sorted(report["surface_style_breakdown"].items())
+                ],
+            ]
+        )
+        surface_delta = report.get("surface_style_delta")
+        if surface_delta is not None:
+            lines.append(f"- surface_style_delta: {surface_delta:.3f}")
     markdown = "\n".join(lines)
     md_path.write_text(markdown + "\n", encoding="utf-8")
     return json_path, md_path
