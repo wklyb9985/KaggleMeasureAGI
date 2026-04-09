@@ -3,7 +3,7 @@ import sys
 from shutil import which
 import importlib
 
-REPO_URL = "https://github.com/wklyb9985/KaggleMeasureAGI/archive/28862a2b37a99ee40a79d9b75bf33d0206cd7be4.zip"
+REPO_URL = "https://github.com/wklyb9985/KaggleMeasureAGI/archive/refs/heads/master.zip"
 try:
     import pip  # noqa: F401
 except ImportError:
